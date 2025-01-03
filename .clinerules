@@ -1,9 +1,18 @@
-Use your memory to remember what you have learned.
+We use uv in this project:
+- Never use "uv pip". It's a legacyc throwback for projects not able to transition to uv yet.
+- You can always run "uv subcommand --help", (examples: uv run --help, uv sync --help etc.)
+For far more information, see all these links:
+- https://docs.astral.sh/uv/getting-started/features/
+- https://docs.astral.sh/uv/guides/scripts/
+- https://docs.astral.sh/uv/guides/tools/
+- https://docs.astral.sh/uv/guides/projects/
+- https://docs.astral.sh/uv/guides/publish/
+- https://docs.astral.sh/uv/guides/integration/pre-commit/
+- https://docs.astral.sh/uv/guides/integration/github/
 Use your sequential thinking tool if you cannot fix an issue in three attempts.
 Use gitpython for all git operations. Here is the API reference: https://gitpython.readthedocs.io/en/stable/reference.html
 Use idiomatic Typer for CLI operations.
 Use pytest for testing and be sure to use it idiomatically and completely.
-Use "uv run pytest -v -s" for example to run installed dependencies via uv. This way no virtual environment is needed.
 Use the installed linters and formatters with the --fix or --write flag to automatically fix and format code before attempting to fix stuff yourself.
 Aim for maximum maintainability.
 Don't repeat yourself.
