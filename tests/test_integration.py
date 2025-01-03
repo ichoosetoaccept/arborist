@@ -1,7 +1,6 @@
 """Integration tests for arborist CLI."""
 
 import os
-import subprocess
 import tempfile
 from pathlib import Path
 
@@ -10,7 +9,7 @@ from git import Repo
 from typer.testing import CliRunner
 
 from arborist.cli import app
-from arborist.git import GitError, GitRepo
+from arborist.git import GitRepo
 
 
 @pytest.fixture
@@ -20,11 +19,11 @@ def test_repo():
         # Initialize repo
         repo_path = Path(temp_dir)
         repo = Repo.init(repo_path)
-        
+
         # Change to repo directory
         old_cwd = os.getcwd()
         os.chdir(repo_path)
-        
+
         try:
             # Create initial commit
             readme = Path("README.md")
@@ -34,13 +33,13 @@ def test_repo():
 
             # Create test branches
             scenarios = {
-                "feature/merged": True,      # Should be merged
-                "feature/unmerged": False,   # Should not be merged
-                "release/1.0": True,         # Protected branch
-                "feature/gone": True,        # Will be deleted remotely
-                "feature/conflict": False,   # Branch with merge conflict
-                "feature/#123": True,        # Branch with special chars
-                "hotfix/1.0/fix": True,      # Nested branch for glob testing
+                "feature/merged": True,  # Should be merged
+                "feature/unmerged": False,  # Should not be merged
+                "release/1.0": True,  # Protected branch
+                "feature/gone": True,  # Will be deleted remotely
+                "feature/conflict": False,  # Branch with merge conflict
+                "feature/#123": True,  # Branch with special chars
+                "hotfix/1.0/fix": True,  # Nested branch for glob testing
             }
 
             # Create a file that will cause conflicts
@@ -89,9 +88,9 @@ def test_repo():
 
             # Return to main
             repo.heads.main.checkout()
-            
+
             yield repo_path
-            
+
         finally:
             # Restore working directory
             os.chdir(old_cwd)
@@ -171,11 +170,7 @@ def test_invalid_repo(runner):
 
 def test_multiple_protection_patterns(test_repo, runner):
     """Test multiple branch protection patterns."""
-    result = runner.invoke(app, [
-        "clean",
-        "--protect", "release/*,hotfix/*",
-        "--no-interactive"
-    ])
+    result = runner.invoke(app, ["clean", "--protect", "release/*,hotfix/*", "--no-interactive"])
     assert result.exit_code == 0
 
     # Verify protected branches still exist

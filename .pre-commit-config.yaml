@@ -23,14 +23,17 @@ repos:
     rev: v0.19.1
     hooks:
       - id: gitlint
-        stages: [commit-msg]
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.3.4
+    rev: v0.8.5
     hooks:
+      # Run the linter.
       - id: ruff
-        args: [--fix, --exit-non-zero-on-fix]
+        types_or: [ python, pyi ]
+        args: [ --fix ]
+      # Run the formatter.
       - id: ruff-format
+        types_or: [ python, pyi ]
 
   - repo: local
     hooks:
@@ -40,18 +43,17 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
-        stages: [manual]
 
       - id: branch-name
         name: Check branch naming convention
-        entry: python -c 'from git import Repo; import sys, re; repo = Repo("."); branch = repo.active_branch.name; patterns = ["^feature/", "^bugfix/", "^hotfix/", "^release/", "^ci/", "^main$"]; sys.exit(1) if not any(re.match(p, branch) for p in patterns) else print(f"Branch name {branch} follows convention")'
+        entry: python -c 'from git import Repo; import sys, re; repo = Repo("."); branch = repo.active_branch.name; patterns = ["^feature/", "^bugfix/", "^hotfix/", "^release/", "^ci/", "^refactor/", "^main$"]; sys.exit(1) if not any(re.match(p, branch) for p in patterns) else print(f"Branch name {branch} follows convention")'
         language: system
         pass_filenames: false
         always_run: true
 
       - id: no-commit-to-main
         name: Prevent commits to main branch
-        entry: python -c 'from git import Repo; import sys; branch = Repo(".").active_branch.name; sys.exit(1) if branch == "main" else True'
+        entry: python -c 'from git import Repo; import sys; repo = Repo("."); sys.exit(1) if repo.active_branch.name == "main" else 0'
         language: system
         stages: [pre-commit]
         pass_filenames: false

@@ -20,7 +20,7 @@ def get_repo(path: Path) -> GitRepo:
         return GitRepo(path)
     except GitError as err:
         print(f"Error: {err}")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from err
 
 
 @app.command()
@@ -52,17 +52,22 @@ def clean(
         "main", "--protect", "-p", help="Comma-separated list of branch patterns to protect"
     ),
     force: bool = typer.Option(False, "--force", "-f", help="Force deletion of unmerged branches"),
-    no_interactive: bool = typer.Option(False, "--no-interactive", "-y", help="Skip confirmation prompts"),
-    dry_run: bool = typer.Option(False, "--dry-run", "-n", help="Show what would be done without doing it"),
+    no_interactive: bool = typer.Option(
+        False, "--no-interactive", "-y", help="Skip confirmation prompts"
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", "-n", help="Show what would be done without doing it"
+    ),
 ) -> None:
     """Clean up merged and gone branches."""
     repo = get_repo(path)
     protect_list = [p.strip() for p in protect.split(",")]
+
     try:
         repo.clean(protect_list, force, not no_interactive, dry_run)
     except GitError as err:
         print(f"Error: {err}")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from err
 
 
 if __name__ == "__main__":

@@ -9,6 +9,6 @@ Features:
 - Dry run option to preview changes
 """
 
-from arborist.git import GitRepo, GitError, BranchStatus
+from arborist.git import BranchStatus, GitError, GitRepo
 
 __all__ = ["GitRepo", "GitError", "BranchStatus"]
