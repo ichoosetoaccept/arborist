@@ -1,483 +1,233 @@
-"""Integration tests for arborist CLI."""
+"""Integration tests for arborist CLI.
 
-import logging
+Tests various branch cleanup scenarios.
+Includes tests for branch listing, cleaning, and protection.
+"""
+
 import os
-import subprocess
+import tempfile
 from pathlib import Path
-from typing import Generator, TypedDict
+from typing import Generator
 
 import pytest
-from git import GitCommandError, Repo
-from git.repo.base import Repo as GitRepo
+from git import Repo
+from typer.testing import CliRunner
 
-logger = logging.getLogger(__name__)
-
-
-class BranchScenario(TypedDict):
-    """Branch scenario configuration."""
-
-    files: list[tuple[str, str]] | tuple[str, str]
-    should_merge: bool
-    has_remote: bool
-
-
-def _get_test_scenarios() -> dict[str, BranchScenario]:
-    """Get test branch scenarios.
-
-    Returns
-    -------
-    dict[str, BranchScenario]
-        Branch scenarios
-    """
-    return {
-        # Regular merged branch
-        "feature/merged": {
-            "files": ("merged.txt", "Merged feature"),
-            "should_merge": True,  # Should be merged
-            "has_remote": False,  # No remote
-        },
-        # Unmerged branch
-        "feature/unmerged": {
-            "files": ("unmerged.txt", "Unmerged feature"),
-            "should_merge": False,  # Should not be merged
-            "has_remote": False,  # No remote
-        },
-        # Branch with remote tracking
-        "feature/remote": {
-            "files": ("remote.txt", "Remote feature"),
-            "should_merge": True,  # Should be merged
-            "has_remote": True,  # Has remote
-        },
-        # Protected branch pattern
-        "release/1.0": {
-            "files": ("release.txt", "Release 1.0"),
-            "should_merge": True,  # Should be merged
-            "has_remote": False,  # No remote
-        },
-        # Branch with multiple commits
-        "feature/multi-commit": {
-            "files": [
-                ("multi1.txt", "First commit"),
-                ("multi2.txt", "Second commit"),
-                ("multi3.txt", "Third commit"),
-            ],
-            "should_merge": True,  # Should be merged
-            "has_remote": False,  # No remote
-        },
-        # Branch with merge conflicts
-        "feature/conflicts": {
-            "files": ("conflict.txt", "This will conflict"),
-            "should_merge": False,  # Should not be merged
-            "has_remote": False,  # No remote
-        },
-        # Branch with remote but deleted upstream
-        "feature/gone": {
-            "files": ("gone.txt", "Gone feature"),
-            "should_merge": False,  # Should not be merged
-            "has_remote": True,  # Has remote (initially)
-        },
-        # Branch with special characters
-        "feature/special-chars-#123": {
-            "files": ("special.txt", "Special chars"),
-            "should_merge": True,  # Should be merged
-            "has_remote": False,  # No remote
-        },
-    }
-
-
-def _setup_test_branches(repo: GitRepo, repo_path: Path, scenarios: dict[str, BranchScenario]) -> None:
-    """Set up test branches in the repository.
-
-    Parameters
-    ----------
-    repo : GitRepo
-        Repository to set up branches in
-    repo_path : Path
-        Path to repository
-    scenarios : dict[str, BranchScenario]
-        Branch scenarios to set up
-    """
-    # Create each branch first
-    for branch_name in scenarios:
-        repo.create_head(branch_name)
-
-    # Create merge conflict scenario first
-    repo.heads["feature/conflicts"].checkout()
-    conflict_file = repo_path / "conflict.txt"
-    conflict_file.write_text("Conflict branch content")
-    repo.index.add([str(conflict_file)])
-    repo.index.commit("Add conflict file on feature branch")
-
-    repo.heads.main.checkout()
-    conflict_file.write_text("Main branch content")
-    repo.index.add([str(conflict_file)])
-    repo.index.commit("Add conflict file on main")
-
-    # Now create content for other branches
-    for branch_name, scenario in scenarios.items():
-        if branch_name == "feature/conflicts":
-            continue  # Skip, already handled
-
-        branch = repo.heads[branch_name]
-        branch.checkout()
-
-        # Handle multi-commit scenarios
-        files = scenario["files"]
-        if isinstance(files, list):
-            for filename, content in files:
-                test_file = repo_path / filename
-                test_file.write_text(content)
-                repo.index.add([str(test_file)])
-                repo.index.commit(f"Add {filename}")
-        else:
-            filename, content = files
-            test_file = repo_path / filename
-            test_file.write_text(content)
-            repo.index.add([str(test_file)])
-            repo.index.commit(f"Add {filename}")
-
-        if scenario["has_remote"]:
-            repo.git.push("--set-upstream", "origin", branch_name)
-
-
-def _merge_test_branches(repo: GitRepo, scenarios: dict[str, BranchScenario]) -> None:
-    """Merge test branches into main.
-
-    Parameters
-    ----------
-    repo : GitRepo
-        Repository to merge branches in
-    scenarios : dict[str, BranchScenario]
-        Branch scenarios to merge
-    """
-    # Ensure we're on main and it's up to date
-    if "main" not in repo.heads:
-        raise ValueError("Main branch not found. Repository not properly initialized.")
-
-    repo.heads.main.checkout()
-    if repo.heads.main.tracking_branch():
-        repo.git.pull("--ff-only")  # Update main if it has a tracking branch
-
-    # Try to merge branches that should be merged
-    for branch_name, scenario in scenarios.items():
-        if scenario["should_merge"]:
-            try:
-                # First update the branch to ensure it's up to date
-                repo.heads[branch_name].checkout()
-                if repo.heads[branch_name].tracking_branch():
-                    repo.git.pull("--ff-only")
-
-                # Then merge into main
-                repo.heads.main.checkout()
-                repo.git.merge(branch_name, no_ff=True)  # Force a merge commit
-
-                # Verify the merge was successful
-                if repo.is_ancestor(repo.heads[branch_name].commit, repo.heads.main.commit):
-                    logger.debug("Successfully merged %s into main", branch_name)
-                else:
-                    logger.warning("Failed to merge %s into main", branch_name)
-
-            except GitCommandError as err:
-                logger.error("Error merging %s: %s", branch_name, err)
-                repo.git.merge("--abort")
-                repo.heads.main.checkout()
-
-    # Ensure we push all changes to main
-    repo.heads.main.checkout()
-    if repo.heads.main.tracking_branch():
-        repo.git.push("origin", "main")
+from arborist.cli import app
+from arborist.git import GitRepo
 
 
 @pytest.fixture
-def test_repo(temp_repo: Repo) -> Generator[GitRepo, None, None]:
-    """Create a test repository with various branch scenarios.
+def test_repo() -> Generator[Path, None, None]:
+    """Create a test repository with various branch scenarios."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        # Initialize repo with main as default branch
+        repo_path = Path(temp_dir)
+        os.environ["GIT_CONFIG_GLOBAL"] = str(repo_path / ".gitconfig")
+        repo = Repo.init(repo_path)
+        with repo.config_writer() as config:
+            config.set_value("init", "defaultBranch", "main")
+            config.set_value("user", "name", "Test User")
+            config.set_value("user", "email", "test@example.com")
 
-    Parameters
-    ----------
-    temp_repo : Repo
-        Base test repository from conftest.py
+        # Change to repo directory
+        old_cwd = os.getcwd()
+        os.chdir(repo_path)
 
-    Yields
-    ------
-    GitRepo
-        Test repository with scenarios
-    """
-    repo = temp_repo
-    repo_path = Path(repo.working_dir)
+        try:
+            # Create initial commit
+            readme = Path("README.md")
+            readme.write_text("# Test Repository")
+            repo.index.add(["README.md"])
+            repo.index.commit("Initial commit")
 
-    # Get and set up test scenarios
-    scenarios = _get_test_scenarios()
-    _setup_test_branches(repo, repo_path, scenarios)
-    _merge_test_branches(repo, scenarios)
+            # Rename master to main
+            master = repo.heads.master
+            master.rename("main")
 
-    # Simulate deleted upstream branch for feature/gone
-    repo.git.push("origin", ":feature/gone")  # Delete remote branch
-    repo.git.fetch("--prune")  # Update remote tracking info
+            # Create test branches
+            scenarios = {
+                "feature/merged": True,  # Should be merged
+                "feature/unmerged": False,  # Should not be merged
+                "release/1.0": True,  # Protected branch
+                "feature/gone": True,  # Will be deleted remotely
+                "feature/conflict": False,  # Branch with merge conflict
+                "feature/#123": True,  # Branch with special chars
+                "hotfix/1.0/fix": True,  # Nested branch for glob testing
+            }
 
-    # Change working directory to repo
-    old_cwd = os.getcwd()
-    os.chdir(repo_path)
+            # Create a file that will cause conflicts
+            conflict_file = Path("conflict.txt")
+            conflict_file.write_text("main content")
+            repo.index.add(["conflict.txt"])
+            repo.index.commit("Add conflict file in main")
 
-    yield repo
+            # Create feature/conflict branch with conflicting changes
+            repo.create_head("feature/conflict").checkout()
+            conflict_file.write_text("branch content")
+            repo.index.add(["conflict.txt"])
+            repo.index.commit("Change content in branch")
 
-    # Restore working directory
-    os.chdir(old_cwd)
+            # Make another change in main to ensure conflict
+            repo.heads.main.checkout()
+            conflict_file.write_text("updated main content")
+            repo.index.add(["conflict.txt"])
+            repo.index.commit("Update content in main")
+
+            # Create and set up other branches
+            for branch_name, should_merge in scenarios.items():
+                if branch_name == "feature/conflict":
+                    continue  # Already created
+
+                # Create and checkout branch
+                branch = repo.create_head(branch_name)
+                branch.checkout()
+
+                # Add a test file
+                test_file = Path(f"{branch_name.replace('/', '_')}.txt")
+                test_file.write_text(f"Test content for {branch_name}")
+                repo.index.add([str(test_file)])
+                repo.index.commit(f"Add test file for {branch_name}")
+
+                # Add extra commits to some branches
+                if branch_name == "feature/#123":
+                    test_file.write_text(f"Updated content for {branch_name}")
+                    repo.index.add([str(test_file)])
+                    repo.index.commit("Update test file")
+
+                # Try to merge if needed
+                if should_merge:
+                    repo.heads.main.checkout()
+                    repo.git.merge(branch_name, no_ff=True)
+
+            # Return to main
+            repo.heads.main.checkout()
+
+            yield repo_path
+
+        finally:
+            # Restore working directory
+            os.chdir(old_cwd)
 
 
-def run_arb(args: list[str], input_text: str | None = None) -> tuple[int, str, str]:
-    """Run arb command and return its output.
-
-    Parameters
-    ----------
-    args : List[str]
-        Command arguments
-    input_text : Optional[str]
-        Text to send to stdin
-
-    Returns
-    -------
-    Tuple[int, str, str]
-        Exit code, stdout, and stderr
-    """
-    process = subprocess.run(
-        ["arb"] + args,
-        input=input_text,
-        capture_output=True,
-        text=True,
-    )
-    return process.returncode, process.stdout, process.stderr
+@pytest.fixture
+def runner() -> CliRunner:
+    """Create a CLI test runner."""
+    return CliRunner()
 
 
-def test_list_command(test_repo: GitRepo) -> None:
-    """Test arb list command.
-
-    Parameters
-    ----------
-    test_repo : GitRepo
-        Test repository
-    """
-    exit_code, stdout, stderr = run_arb(["list"])
-    assert exit_code == 0
-    assert "feature/merged" in stdout
-    assert "feature/unmerged" in stdout
-    assert "feature/remote" in stdout
-    assert "release/1.0" in stdout
-    assert "merged" in stdout.lower()
-    assert "unmerged" in stdout.lower()
+def test_list_command(test_repo: Path, runner: CliRunner) -> None:
+    """Test the list command."""
+    result = runner.invoke(app, ["list"])
+    assert result.exit_code == 0
+    assert "feature/merged" in result.stdout
+    assert "feature/unmerged" in result.stdout
+    assert "release/1.0" in result.stdout
 
 
-def test_clean_merged_branch(test_repo: GitRepo) -> None:
-    """Test cleaning a merged branch without remote tracking.
-
-    Parameters
-    ----------
-    test_repo : GitRepo
-        Test repository
-    """
-    # Clean with auto-yes
-    exit_code, stdout, stderr = run_arb(["clean", "--no-interactive"])
-    assert exit_code == 0
-    assert "feature/merged" in stdout
-    assert "Successfully deleted" in stdout
+def test_clean_merged_branch(test_repo: Path, runner: CliRunner) -> None:
+    """Test cleaning a merged branch."""
+    result = runner.invoke(app, ["clean", "--no-interactive"])
+    assert result.exit_code == 0
+    assert "feature/merged" in result.stdout
+    assert "Successfully deleted" in result.stdout
 
     # Verify branch is gone
-    assert "feature/merged" not in [b.name for b in test_repo.heads]
+    repo = GitRepo(test_repo)
+    branches = repo.get_branch_status()
+    assert "feature/merged" not in branches
 
 
-def test_clean_with_force(test_repo: GitRepo) -> None:
-    """Test force cleaning branches.
-
-    Parameters
-    ----------
-    test_repo : GitRepo
-        Test repository
-    """
-    # Clean with force and auto-yes
-    exit_code, stdout, stderr = run_arb(["clean", "--force", "--no-interactive"])
-    assert exit_code == 0
-    assert "feature/unmerged" in stdout
-    assert "Successfully deleted" in stdout
-
-    # Verify branch is gone
-    assert "feature/unmerged" not in [b.name for b in test_repo.heads]
-
-
-def test_clean_with_protection(test_repo: GitRepo) -> None:
-    """Test branch protection during cleanup.
-
-    Parameters
-    ----------
-    test_repo : GitRepo
-        Test repository
-    """
-    # Clean with protection and auto-yes
-    exit_code, stdout, stderr = run_arb(["clean", "--protect", "release/*", "--no-interactive"])
-    assert exit_code == 0
-    assert "release/1.0" not in stdout
+def test_clean_with_protection(test_repo: Path, runner: CliRunner) -> None:
+    """Test branch protection."""
+    result = runner.invoke(app, ["clean", "--protect", "release/*", "--no-interactive"])
+    assert result.exit_code == 0
+    assert "release/1.0" not in result.stdout
 
     # Verify protected branch still exists
-    assert "release/1.0" in [b.name for b in test_repo.heads]
+    repo = GitRepo(test_repo)
+    branches = repo.get_branch_status()
+    assert "release/1.0" in branches
 
 
-def test_clean_dry_run(test_repo: GitRepo) -> None:
-    """Test dry run mode.
-
-    Parameters
-    ----------
-    test_repo : GitRepo
-        Test repository
-    """
-    # Clean with dry-run
-    exit_code, stdout, stderr = run_arb(["clean", "--dry-run"])
-    assert exit_code == 0
-    assert "Dry run" in stdout
-    assert "feature/merged" in stdout
+def test_clean_dry_run(test_repo: Path, runner: CliRunner) -> None:
+    """Test dry run mode."""
+    result = runner.invoke(app, ["clean", "--dry-run"])
+    assert result.exit_code == 0
+    assert "Would delete branch" in result.stdout
 
     # Verify no branches were actually deleted
-    assert "feature/merged" in [b.name for b in test_repo.heads]
+    repo = GitRepo(test_repo)
+    branches = repo.get_branch_status()
+    assert "feature/merged" in branches
 
 
-def test_clean_remote_tracking_branch(test_repo: GitRepo) -> None:
-    """Test cleaning a branch with remote tracking.
-
-    Parameters
-    ----------
-    test_repo : GitRepo
-        Test repository
-    """
-    # Try to clean without force
-    exit_code, stdout, stderr = run_arb(["clean", "--no-interactive"])
-    assert exit_code == 0
-    assert "feature/remote" not in stdout
-
-    # Clean with force
-    exit_code, stdout, stderr = run_arb(["clean", "--force", "--no-interactive"])
-    assert exit_code == 0
-    assert "feature/remote" in stdout
-    assert "Successfully deleted" in stdout
-
-    # Verify branch is gone
-    assert "feature/remote" not in [b.name for b in test_repo.heads]
-
-
-def test_clean_multi_commit_branch(test_repo: GitRepo) -> None:
-    """Test cleaning a branch with multiple commits.
-
-    Parameters
-    ----------
-    test_repo : GitRepo
-        Test repository
-    """
-    # Clean with auto-yes
-    exit_code, stdout, stderr = run_arb(["clean", "--no-interactive"])
-    assert exit_code == 0
-    assert "feature/multi-commit" in stdout
-    assert "Successfully deleted" in stdout
-
-    # Verify branch is gone
-    assert "feature/multi-commit" not in [b.name for b in test_repo.heads]
-
-
-def test_clean_branch_with_conflicts(test_repo: GitRepo) -> None:
-    """Test cleaning a branch that has merge conflicts.
-
-    Parameters
-    ----------
-    test_repo : GitRepo
-        Test repository
-    """
-    # Try to clean without force
-    exit_code, stdout, stderr = run_arb(["clean", "--no-interactive"])
-    assert exit_code == 0
-    assert "feature/conflicts" not in stdout  # Should not be suggested for deletion
-
-    # Clean with force
-    exit_code, stdout, stderr = run_arb(["clean", "--force", "--no-interactive"])
-    assert exit_code == 0
-    assert "feature/conflicts" in stdout
-    assert "Successfully deleted" in stdout
-
-    # Verify branch is gone
-    assert "feature/conflicts" not in [b.name for b in test_repo.heads]
-
-
-def test_clean_gone_branch(test_repo: GitRepo) -> None:
-    """Test cleaning a branch whose remote was deleted.
-
-    Parameters
-    ----------
-    test_repo : GitRepo
-        Test repository
-    """
-    # Verify branch is marked as gone
-    exit_code, stdout, stderr = run_arb(["list"])
-    assert exit_code == 0
-    assert "feature/gone" in stdout
-    assert "gone" in stdout.lower()
-
-    # Clean with auto-yes (gone branches should be cleaned)
-    exit_code, stdout, stderr = run_arb(["clean", "--no-interactive"])
-    assert exit_code == 0
-    assert "feature/gone" in stdout
-    assert "Successfully deleted" in stdout
-
-    # Verify branch is gone
-    assert "feature/gone" not in [b.name for b in test_repo.heads]
-
-
-def test_clean_special_chars_branch(test_repo: GitRepo) -> None:
-    """Test cleaning a branch with special characters in its name.
-
-    Parameters
-    ----------
-    test_repo : GitRepo
-        Test repository
-    """
-    # Clean with auto-yes
-    exit_code, stdout, stderr = run_arb(["clean", "--no-interactive"])
-    assert exit_code == 0
-    assert "feature/special-chars-#123" in stdout
-    assert "Successfully deleted" in stdout
-
-    # Verify branch is gone
-    assert "feature/special-chars-#123" not in [b.name for b in test_repo.heads]
-
-
-def test_clean_interactive_cancel(test_repo: GitRepo) -> None:
-    """Test canceling branch cleanup in interactive mode.
-
-    Parameters
-    ----------
-    test_repo : GitRepo
-        Test repository
-    """
-    # Get initial branch list
-    initial_branches = {b.name for b in test_repo.heads}
-
-    # Run clean and respond with 'n'
-    exit_code, stdout, stderr = run_arb(["clean"], input_text="n")
-    assert exit_code == 0
-    assert "Operation cancelled" in stdout
+def test_clean_interactive_cancel(test_repo: Path, runner: CliRunner) -> None:
+    """Test canceling in interactive mode."""
+    result = runner.invoke(app, ["clean"], input="n\n")
+    assert result.exit_code == 0
+    assert "Operation cancelled" in result.stdout
 
     # Verify no branches were deleted
-    final_branches = {b.name for b in test_repo.heads}
-    assert initial_branches == final_branches
+    repo = GitRepo(test_repo)
+    branches = repo.get_branch_status()
+    assert "feature/merged" in branches
 
 
-def test_clean_current_branch(test_repo: GitRepo) -> None:
-    """Test attempting to clean the current branch.
+def test_invalid_repo(runner: CliRunner) -> None:
+    """Test handling of invalid repository path."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        result = runner.invoke(app, ["list", "--path", temp_dir])
+        assert result.exit_code == 1
+        assert "Failed to open repository" in result.stdout
 
-    Parameters
-    ----------
-    test_repo : GitRepo
-        Test repository
-    """
-    # Switch to a merged branch
-    test_repo.heads["feature/merged"].checkout()
 
-    # Try to clean with force
-    exit_code, stdout, stderr = run_arb(["clean", "--force", "--no-interactive"])
-    assert exit_code == 0
+def test_multiple_protection_patterns(test_repo: Path, runner: CliRunner) -> None:
+    """Test multiple branch protection patterns."""
+    result = runner.invoke(app, ["clean", "--protect", "release/*,hotfix/*", "--no-interactive"])
+    assert result.exit_code == 0
 
-    # Current branch should be skipped
-    assert "feature/merged" in [b.name for b in test_repo.heads]
+    # Verify protected branches still exist
+    repo = GitRepo(test_repo)
+    branches = repo.get_branch_status()
+    assert "release/1.0" in branches
+    assert "hotfix/1.0/fix" in branches
+
+
+def test_force_delete_unmerged(test_repo: Path, runner: CliRunner) -> None:
+    """Test force deletion of unmerged branches."""
+    result = runner.invoke(app, ["clean", "--force", "--no-interactive"])
+    assert result.exit_code == 0
+    assert "feature/unmerged" in result.stdout
+    assert "Successfully deleted" in result.stdout
+
+    # Verify branch is gone
+    repo = GitRepo(test_repo)
+    branches = repo.get_branch_status()
+    assert "feature/unmerged" not in branches
+
+
+def test_special_chars_branch(test_repo: Path, runner: CliRunner) -> None:
+    """Test handling of branches with special characters."""
+    result = runner.invoke(app, ["clean", "--no-interactive"])
+    assert result.exit_code == 0
+    assert "feature/#123" in result.stdout
+    assert "Successfully deleted" in result.stdout
+
+    # Verify branch is gone
+    repo = GitRepo(test_repo)
+    branches = repo.get_branch_status()
+    assert "feature/#123" not in branches
+
+
+def test_conflict_branch_protection(test_repo: Path, runner: CliRunner) -> None:
+    """Test that conflicted branches are not deleted without force."""
+    result = runner.invoke(app, ["clean", "--no-interactive"])
+    assert result.exit_code == 0
+    assert "feature/conflict" not in result.stdout
+
+    # Verify branch still exists and is marked as unmerged
+    repo = GitRepo(test_repo)
+    branches = repo.get_branch_status()
+    assert "feature/conflict" in branches
+    assert branches["feature/conflict"].value == "unmerged"

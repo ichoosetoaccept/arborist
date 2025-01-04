@@ -119,6 +119,53 @@ You can configure default behavior by creating a `.arboristrc` file in your home
 - Git 2.28 or higher
 - Docker (optional, for cross-platform testing)
 
+### Development Setup
+
+We provide a convenient setup script that automates the development environment setup:
+
+```bash
+./scripts/install-dev.sh
+```
+
+This script will:
+1. Check for uv installation
+2. Install project dependencies
+3. Set up pre-commit hooks for:
+   - Code formatting and linting
+   - Commit message validation
+4. Run initial pre-commit checks
+
+After running the script, you'll be ready to create branches and start contributing following our branch naming convention:
+- `feature/your-feature`
+- `bugfix/your-bugfix`
+- `hotfix/your-hotfix`
+- `release/version`
+- `ci/your-ci-change`
+
+### Package Management with uv
+
+This project uses [uv](https://github.com/astral/uv) for Python package management. uv is a modern Python package manager focused on speed and reliability.
+
+To install uv:
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+Key uv commands used in this project:
+```bash
+# Install dependencies
+uv sync
+
+# Run a command (e.g., pytest, pre-commit)
+uv run pytest
+uv run pre-commit run --all-files
+
+# Install the package as a development tool
+uv tool install -e .
+```
+
+Note: Never use `uv pip` as it's a legacy command. Use the modern uv commands instead.
+
 ### Platform Support
 
 The project is actively tested on:
