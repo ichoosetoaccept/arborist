@@ -4,36 +4,50 @@ repos:
     hooks:
       # Essential checks
       - id: check-ast  # Catch Python syntax errors
+        stages: [pre-commit]
       - id: check-yaml  # Catch YAML syntax errors
+        stages: [pre-commit]
       - id: check-json  # Catch JSON syntax errors
+        stages: [pre-commit]
       - id: check-merge-conflict
+        stages: [pre-commit]
       - id: detect-private-key
+        stages: [pre-commit]
       - id: end-of-file-fixer
+        stages: [pre-commit]
       - id: trailing-whitespace
+        stages: [pre-commit]
 
       # Security and large files
       - id: check-added-large-files
+        stages: [pre-commit]
 
       # File integrity
       - id: check-case-conflict  # Important for cross-platform projects
+        stages: [pre-commit]
       - id: check-executables-have-shebangs
+        stages: [pre-commit]
       - id: check-symlinks
+        stages: [pre-commit]
 
   - repo: https://github.com/jorisroovers/gitlint
     rev: v0.19.1
     hooks:
       - id: gitlint
+        stages: [commit-msg]
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.8.5
     hooks:
       # Run the linter.
       - id: ruff
-        types_or: [ python, pyi ]
-        args: [ --fix ]
+        types_or: [python, pyi]
+        args: [--fix]
+        stages: [pre-commit]
       # Run the formatter.
       - id: ruff-format
-        types_or: [ python, pyi ]
+        types_or: [python, pyi]
+        stages: [pre-commit]
 
   - repo: local
     hooks:
@@ -43,13 +57,14 @@ repos:
         language: system
         types: [python]
         pass_filenames: false
+        stages: [pre-commit]
 
       - id: branch-name
         name: Check branch naming convention
         entry: python -c 'from git import Repo; import sys, re; repo = Repo("."); branch = repo.active_branch.name; patterns = ["^feature/", "^bugfix/", "^hotfix/", "^release/", "^ci/", "^refactor/", "^main$"]; sys.exit(1) if not any(re.match(p, branch) for p in patterns) else print(f"Branch name {branch} follows convention")'
         language: system
         pass_filenames: false
-        always_run: true
+        stages: [pre-commit]
 
       - id: no-commit-to-main
         name: Prevent commits to main branch
@@ -57,4 +72,3 @@ repos:
         language: system
         stages: [pre-commit]
         pass_filenames: false
-        always_run: true
