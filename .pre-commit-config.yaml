@@ -41,8 +41,8 @@ repos:
         name: pytest
         entry: pytest
         language: system
+        types: [python]
         pass_filenames: false
-        always_run: true
 
       - id: branch-name
         name: Check branch naming convention
