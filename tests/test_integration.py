@@ -16,9 +16,14 @@ from arborist.git import GitRepo
 def test_repo():
     """Create a test repository with various branch scenarios."""
     with tempfile.TemporaryDirectory() as temp_dir:
-        # Initialize repo
+        # Initialize repo with main as default branch
         repo_path = Path(temp_dir)
+        os.environ["GIT_CONFIG_GLOBAL"] = str(repo_path / ".gitconfig")
         repo = Repo.init(repo_path)
+        with repo.config_writer() as config:
+            config.set_value("init", "defaultBranch", "main")
+            config.set_value("user", "name", "Test User")
+            config.set_value("user", "email", "test@example.com")
 
         # Change to repo directory
         old_cwd = os.getcwd()
@@ -30,6 +35,10 @@ def test_repo():
             readme.write_text("# Test Repository")
             repo.index.add(["README.md"])
             repo.index.commit("Initial commit")
+
+            # Rename master to main
+            master = repo.heads.master
+            master.rename("main")
 
             # Create test branches
             scenarios = {
