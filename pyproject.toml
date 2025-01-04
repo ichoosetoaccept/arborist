@@ -18,6 +18,9 @@ arb = "arborist.cli:app"
 [tool.uv]
 package = true
 
+[tool.setuptools.package-data]
+arborist = ["py.typed"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]

@@ -3,6 +3,7 @@
 import os
 import tempfile
 from pathlib import Path
+from typing import Generator
 
 import pytest
 from git import Repo
@@ -13,7 +14,7 @@ from arborist.git import GitRepo
 
 
 @pytest.fixture
-def test_repo():
+def test_repo() -> Generator[Path, None, None]:
     """Create a test repository with various branch scenarios."""
     with tempfile.TemporaryDirectory() as temp_dir:
         # Initialize repo with main as default branch
@@ -106,12 +107,12 @@ def test_repo():
 
 
 @pytest.fixture
-def runner():
+def runner() -> CliRunner:
     """Create a CLI test runner."""
     return CliRunner()
 
 
-def test_list_command(test_repo, runner):
+def test_list_command(test_repo: Path, runner: CliRunner) -> None:
     """Test the list command."""
     result = runner.invoke(app, ["list"])
     assert result.exit_code == 0
@@ -120,7 +121,7 @@ def test_list_command(test_repo, runner):
     assert "release/1.0" in result.stdout
 
 
-def test_clean_merged_branch(test_repo, runner):
+def test_clean_merged_branch(test_repo: Path, runner: CliRunner) -> None:
     """Test cleaning a merged branch."""
     result = runner.invoke(app, ["clean", "--no-interactive"])
     assert result.exit_code == 0
@@ -133,7 +134,7 @@ def test_clean_merged_branch(test_repo, runner):
     assert "feature/merged" not in branches
 
 
-def test_clean_with_protection(test_repo, runner):
+def test_clean_with_protection(test_repo: Path, runner: CliRunner) -> None:
     """Test branch protection."""
     result = runner.invoke(app, ["clean", "--protect", "release/*", "--no-interactive"])
     assert result.exit_code == 0
@@ -145,7 +146,7 @@ def test_clean_with_protection(test_repo, runner):
     assert "release/1.0" in branches
 
 
-def test_clean_dry_run(test_repo, runner):
+def test_clean_dry_run(test_repo: Path, runner: CliRunner) -> None:
     """Test dry run mode."""
     result = runner.invoke(app, ["clean", "--dry-run"])
     assert result.exit_code == 0
@@ -157,7 +158,7 @@ def test_clean_dry_run(test_repo, runner):
     assert "feature/merged" in branches
 
 
-def test_clean_interactive_cancel(test_repo, runner):
+def test_clean_interactive_cancel(test_repo: Path, runner: CliRunner) -> None:
     """Test canceling in interactive mode."""
     result = runner.invoke(app, ["clean"], input="n\n")
     assert result.exit_code == 0
@@ -169,7 +170,7 @@ def test_clean_interactive_cancel(test_repo, runner):
     assert "feature/merged" in branches
 
 
-def test_invalid_repo(runner):
+def test_invalid_repo(runner: CliRunner) -> None:
     """Test handling of invalid repository path."""
     with tempfile.TemporaryDirectory() as temp_dir:
         result = runner.invoke(app, ["list", "--path", temp_dir])
@@ -177,7 +178,7 @@ def test_invalid_repo(runner):
         assert "Failed to open repository" in result.stdout
 
 
-def test_multiple_protection_patterns(test_repo, runner):
+def test_multiple_protection_patterns(test_repo: Path, runner: CliRunner) -> None:
     """Test multiple branch protection patterns."""
     result = runner.invoke(app, ["clean", "--protect", "release/*,hotfix/*", "--no-interactive"])
     assert result.exit_code == 0
@@ -189,7 +190,7 @@ def test_multiple_protection_patterns(test_repo, runner):
     assert "hotfix/1.0/fix" in branches
 
 
-def test_force_delete_unmerged(test_repo, runner):
+def test_force_delete_unmerged(test_repo: Path, runner: CliRunner) -> None:
     """Test force deletion of unmerged branches."""
     result = runner.invoke(app, ["clean", "--force", "--no-interactive"])
     assert result.exit_code == 0
@@ -202,7 +203,7 @@ def test_force_delete_unmerged(test_repo, runner):
     assert "feature/unmerged" not in branches
 
 
-def test_special_chars_branch(test_repo, runner):
+def test_special_chars_branch(test_repo: Path, runner: CliRunner) -> None:
     """Test handling of branches with special characters."""
     result = runner.invoke(app, ["clean", "--no-interactive"])
     assert result.exit_code == 0
@@ -215,7 +216,7 @@ def test_special_chars_branch(test_repo, runner):
     assert "feature/#123" not in branches
 
 
-def test_conflict_branch_protection(test_repo, runner):
+def test_conflict_branch_protection(test_repo: Path, runner: CliRunner) -> None:
     """Test that conflicted branches are not deleted without force."""
     result = runner.invoke(app, ["clean", "--no-interactive"])
     assert result.exit_code == 0
