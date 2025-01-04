@@ -1,4 +1,7 @@
-"""Integration tests for arborist CLI."""
+"""Integration tests for arborist CLI.
+
+Tests various branch cleanup scenarios.
+"""
 
 import os
 import tempfile
