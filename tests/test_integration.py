@@ -1,6 +1,7 @@
 """Integration tests for arborist CLI.
 
 Tests various branch cleanup scenarios.
+Includes tests for branch listing, cleaning, and protection.
 """
 
 import os
