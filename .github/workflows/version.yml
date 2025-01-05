@@ -78,7 +78,6 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
-          permissions: write-all-pages
 
       - name: Configure Git
         run: |
