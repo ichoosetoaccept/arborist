@@ -92,7 +92,6 @@ You can configure default behavior by creating a `.arboristrc` file in your home
 ```json
 {
   "protectedBranches": ["main", "develop"],
-  "dryRunByDefault": false,
   "interactive": false,
   "skipGc": false,
   "reflogExpiry": "90.days"

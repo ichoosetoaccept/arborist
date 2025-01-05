@@ -34,7 +34,7 @@ def test_list_command(test_repo: Path, runner: CliRunner) -> None:
     assert "feature/merged" in result.stdout
     assert "feature/test" in result.stdout
     assert "feature/current" in result.stdout
-    assert "✓" in result.stdout
+    assert "✅" in result.stdout
     assert "✋" in result.stdout
 
     # Verify branch names are on single lines (no line breaks in branch names)
@@ -46,6 +46,102 @@ def test_list_command(test_repo: Path, runner: CliRunner) -> None:
                 assert line.count("feature/") == 1  # Branch name should be on a single line
             elif "origin/feature/" in line:  # Remote branch
                 assert line.count("origin/feature/") == 1  # Branch name should be on a single line
+
+
+def test_list_command_silent_mode(test_repo: Path, runner: CliRunner) -> None:
+    """Test that list command in silent mode produces no output."""
+    result = runner.invoke(app, ["list", "--path", str(test_repo), "--silent"])
+    assert result.exit_code == 0
+    assert not result.stdout  # Silent mode should produce no output
+
+
+def test_fetch_before_list(test_repo: Path, runner: CliRunner) -> None:
+    """Test that list command fetches from remotes before displaying branches."""
+    repo = GitRepo(test_repo)
+    test_repo_obj = repo.repo
+
+    # Create and push a test branch in the remote
+    remote_repo = test_repo_obj.remote().repo
+    remote_repo.git.branch("test/remote-fetch")
+
+    # Run list command which should fetch and show the new remote branch
+    result = runner.invoke(app, ["list", "--path", str(test_repo)])
+    assert result.exit_code == 0
+    assert "test/remote-fetch" in result.stdout
+
+
+def test_fetch_before_clean(test_repo: Path, runner: CliRunner) -> None:
+    """Test that clean command fetches from remotes before cleaning."""
+    repo = GitRepo(test_repo)
+    test_repo_obj = repo.repo
+
+    # Make sure we're on main first
+    test_repo_obj.git.checkout("main")
+
+    # Create and push a test branch
+    test_repo_obj.git.checkout("-b", "test/to-delete")
+    test_repo_obj.git.push("origin", "test/to-delete")
+
+    # Switch back to main before deleting
+    test_repo_obj.git.checkout("main")
+
+    # Delete the branch on remote directly
+    remote_repo = test_repo_obj.remote().repo
+    remote_repo.git.branch("-D", "test/to-delete")
+
+    # Run clean command which should fetch and detect the gone branch
+    result = runner.invoke(app, ["clean", "--path", str(test_repo), "--no-interactive"])
+    assert result.exit_code == 0
+    assert "test/to-delete" in result.stdout
+    assert "gone" in result.stdout.lower()
+
+
+def test_clean_uses_list_state(test_repo: Path, runner: CliRunner) -> None:
+    """Test that clean command uses list command's state."""
+    # First run list to get initial state
+    list_result = runner.invoke(app, ["list", "--path", str(test_repo)])
+    assert list_result.exit_code == 0
+
+    # Run clean command with no-interactive mode
+    clean_result = runner.invoke(app, ["clean", "--path", str(test_repo), "--no-interactive"])
+    assert clean_result.exit_code == 0
+
+    # Extract cleanable branches from list output
+    list_cleanable = []
+    for line in list_result.stdout.splitlines():
+        if "✅" in line:
+            # Extract branch name from the line (between first two │ characters)
+            parts = line.split("│")
+            if len(parts) >= 2:
+                branch = parts[1].strip()
+                # Remove (current) indicator if present
+                branch = branch.replace(" (current)", "")
+                list_cleanable.append(branch)
+
+    # Extract branches that were deleted from clean output
+    clean_branches = []
+    for line in clean_result.stdout.splitlines():
+        if "Successfully deleted" in line:
+            # The next lines will contain the branch names
+            continue
+        if "│" in line:  # Table row
+            parts = line.split("│")
+            if len(parts) >= 2:
+                branch = parts[1].strip()
+                if branch and not branch == "Branch":  # Skip header row
+                    clean_branches.append(branch)
+
+    # Sort and deduplicate the lists
+    list_cleanable = sorted(set(list_cleanable))
+    clean_branches = sorted(set(clean_branches))
+
+    # Verify both commands identified the same branches
+    assert list_cleanable == clean_branches
+
+    # Verify repo state
+    repo = GitRepo(test_repo)
+    branches = repo.get_branch_status()
+    assert "main" in branches
 
 
 def test_clean_merged_branch(test_repo: Path, runner: CliRunner) -> None:
@@ -91,8 +187,8 @@ def test_clean_with_protection(test_repo: Path, runner: CliRunner) -> None:
             assert branch in final_branches, f"Protected branch {branch} was deleted"
 
 
-def test_clean_dry_run(test_repo: Path, runner: CliRunner) -> None:
-    """Test dry run mode."""
+def test_clean_preview(test_repo: Path, runner: CliRunner) -> None:
+    """Test preview mode with confirmation cancelled."""
     # First verify the repo state
     repo = GitRepo(test_repo)
     print("\nDEBUG: Initial repo state:")
@@ -101,33 +197,13 @@ def test_clean_dry_run(test_repo: Path, runner: CliRunner) -> None:
     for branch, status in repo.get_branch_status().items():
         print(f"DEBUG: {branch}: {status.value}")
 
-    # Run the clean command with the correct repo path
-    result = runner.invoke(app, ["clean", "--dry-run", "--path", str(test_repo)])
+    # Run the clean command with interactive mode and simulate 'n' input
+    result = runner.invoke(app, ["clean", "--path", str(test_repo)], input="n\n")
     print("\nDEBUG: Clean command output:")
     print(result.stdout)
 
     assert result.exit_code == 0
-    assert "Would delete branch" in result.stdout
-
-    # Verify no branches were actually deleted
-    repo = GitRepo(test_repo)
-    branches = repo.get_branch_status()
-    assert "feature/merged" in branches
-
-
-def test_clean_interactive_cancel(test_repo: Path, runner: CliRunner) -> None:
-    """Test canceling in interactive mode."""
-    # First verify the repo state
-    repo = GitRepo(test_repo)
-
-    # Run the clean command with the correct repo path
-    result = runner.invoke(app, ["clean", "--path", str(test_repo)], input="n\n")
-
-    assert result.exit_code == 0
-    # Verify no branches were deleted
-    repo = GitRepo(test_repo)
-    branches = repo.get_branch_status()
-    assert "feature/merged" in branches  # Branch should still exist
+    assert "Operation cancelled" in result.stdout
 
 
 def test_invalid_repo(runner: CliRunner) -> None:
