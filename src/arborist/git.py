@@ -295,7 +295,7 @@ class GitRepo:
                 self.repo.git.log(
                     "-1",
                     "--format=%cd",
-                    "--date=format:'%A - %B %d @ %H:%M'",
+                    "--date=format:'%a - %B %d @ %H:%M'",
                     branch_name,
                 ).strip("'")
             )

@@ -65,27 +65,19 @@ def get_column_widths(
 
 def create_branch_table(title: str, branch_width: int, status_width: int, commit_width: int, cleanable_width: int) -> Table:
     """Create a table with standard branch columns."""
-    # Get console width for overall table width
-    console_width = console.width
-    min_width = 80  # Minimum table width
-    max_width = 100  # Maximum table width
-    table_width = max(min_width, min(console_width - 4, max_width))
-
     table = Table(
         title=title,
         show_header=True,
         header_style="bold",
         title_style="bold blue",
-        width=table_width,
-        pad_edge=True,
         show_edge=True,
     )
 
-    # Add columns with consistent widths
-    table.add_column("Branch", style="cyan", width=branch_width, no_wrap=True)
-    table.add_column("Status", style="magenta", width=status_width, justify="center")
-    table.add_column("Last Commit", style="yellow", width=commit_width)
-    table.add_column("Cleanable?", style="green", width=cleanable_width, justify="center")
+    # Add columns with minimum widths and no truncation
+    table.add_column("Branch", style="cyan", min_width=branch_width, no_wrap=True)
+    table.add_column("Status", style="magenta", min_width=status_width, justify="center", no_wrap=True)
+    table.add_column("Last Commit", style="yellow", min_width=commit_width, no_wrap=True)
+    table.add_column("Cleanable?", style="green", min_width=cleanable_width, justify="center", no_wrap=True)
     return table
 
 
@@ -112,19 +104,25 @@ def list(
     local_table = create_branch_table("Local Branches", *column_widths)
     for branch_name in sorted(local_branches.keys()):
         status = local_branches[branch_name]
-        status_display = status.value if status else ""
+        # Color-code the status
+        if status == BranchStatus.MERGED:
+            status_display = "[green]merged[/green]"
+        elif status == BranchStatus.GONE:
+            status_display = "[bright_yellow]gone[/bright_yellow]"
+        else:
+            status_display = status.value if status else ""
 
         # Format branch name with current indicator
         display_name = branch_name
         if branch_name == current:
-            display_name = f"{branch_name}[yellow]\u200b(current)[/yellow]"
+            display_name = f"{branch_name} [turquoise2](current)[/turquoise2]"
 
         # Get last commit info
         last_commit = repo.get_branch_last_commit(branch_name)
 
         # Check if branch is cleanable
         cleanable = repo.is_branch_cleanable(branch_name)
-        cleanable_display = "[green]✓[/green]" if cleanable else "[yellow]✋[/yellow]"
+        cleanable_display = "[green]✅[/green]" if cleanable else "[yellow]✋[/yellow]"
 
         if cleanable:
             cleanable_local.append(branch_name)
@@ -140,14 +138,20 @@ def list(
     remote_table = create_branch_table("Remote Branches", *column_widths)
     for branch_name in sorted(remote_branches.keys()):
         status = remote_branches[branch_name]
-        status_display = status.value if status else ""
+        # Color-code the status
+        if status == BranchStatus.MERGED:
+            status_display = "[green]merged[/green]"
+        elif status == BranchStatus.GONE:
+            status_display = "[bright_yellow]gone[/bright_yellow]"
+        else:
+            status_display = status.value if status else ""
 
         # Get last commit info
         last_commit = repo.get_branch_last_commit(branch_name)
 
         # Check if branch is cleanable
         cleanable = repo.is_branch_cleanable(branch_name)
-        cleanable_display = "[green]✓[/green]" if cleanable else "[yellow]✋[/yellow]"
+        cleanable_display = "[green]✅[/green]" if cleanable else "[yellow]✋[/yellow]"
 
         if cleanable:
             cleanable_remote.append(branch_name)
@@ -163,9 +167,6 @@ def list(
     console.print(local_table)
     console.print(remote_table)
 
-    # Get table width for consistent panel width
-    table_width = min(console.width - 4, 100)
-
     # Show message about cleanable branches
     if cleanable_local or cleanable_remote:
         cleanable_branches = []
@@ -174,14 +175,25 @@ def list(
         if cleanable_remote:
             cleanable_branches.extend(cleanable_remote)
 
-        msg = "The following branches would be deleted if you run `arb clean` next:\n" + "\n".join(f"  {branch}" for branch in cleanable_branches)
-        console.print(Panel(msg, style="red", width=table_width))
+        msg = "The following branches would be deleted if you run [dim]`arb clean`[/dim] next:\n" + "\n".join(
+            f"  [blue]{branch}[/blue]" for branch in cleanable_branches
+        )
+        console.print(
+            Panel(
+                msg,
+                title="Cleanable Branches",
+                title_align="left",
+                padding=(0, 2),
+                expand=False,
+            )
+        )
     else:
         console.print(
             Panel(
                 "[green]Your branches are clean ✨[/green]",
                 style="green",
-                width=table_width,
+                padding=(0, 2),
+                expand=False,
             )
         )
 

@@ -34,7 +34,7 @@ def test_list_command(test_repo: Path, runner: CliRunner) -> None:
     assert "feature/merged" in result.stdout
     assert "feature/test" in result.stdout
     assert "feature/current" in result.stdout
-    assert "✓" in result.stdout
+    assert "✅" in result.stdout
     assert "✋" in result.stdout
 
     # Verify branch names are on single lines (no line breaks in branch names)

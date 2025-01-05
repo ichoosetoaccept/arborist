@@ -21,7 +21,7 @@ def test_main_branch_last_commit(test_env: tuple[Path, Path]) -> None:
     # We can't test the exact timestamp since it depends on when the test runs
     assert " @ " in timestamp  # Check for time separator
     assert " - " in timestamp  # Check for date separator
-    days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
     assert any(day in timestamp for day in days)
 
 
@@ -33,7 +33,7 @@ def test_feature_branch_last_commit(test_env: tuple[Path, Path]) -> None:
     # We can't test the exact timestamp since it depends on when the test runs
     assert " @ " in timestamp  # Check for time separator
     assert " - " in timestamp  # Check for date separator
-    days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
     assert any(day in timestamp for day in days)
 
 
@@ -45,7 +45,7 @@ def test_remote_branch_last_commit(test_env: tuple[Path, Path]) -> None:
     # We can't test the exact timestamp since it depends on when the test runs
     assert " @ " in timestamp  # Check for time separator
     assert " - " in timestamp  # Check for date separator
-    days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
     assert any(day in timestamp for day in days)
 
 
