@@ -162,15 +162,12 @@ class GitRepo:
 
             # Check if branch is protected
             # For remote branches, check both the full name and the branch part after origin/
-            is_protected = False
             if branch_name.startswith("origin/"):
                 branch_without_remote = branch_name.split("/", 1)[1]
-                if any(fnmatch(branch_without_remote, pattern) for pattern in protect):
-                    is_protected = True
-            if any(fnmatch(branch_name, pattern) for pattern in protect):
-                is_protected = True
-
-            if is_protected:
+                if any(fnmatch(branch_without_remote, pattern.strip()) for pattern in protect):
+                    del status[branch_name]
+                    continue
+            if any(fnmatch(branch_name, pattern.strip()) for pattern in protect):
                 del status[branch_name]
                 continue
 

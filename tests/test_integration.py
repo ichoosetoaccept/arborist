@@ -140,7 +140,23 @@ def test_invalid_repo(runner: CliRunner) -> None:
 
 def test_multiple_protection_patterns(test_repo: Path, runner: CliRunner) -> None:
     """Test multiple branch protection patterns."""
+    # Debug output
+    repo = GitRepo(test_repo)
+    print("\nDEBUG: Initial repo state:")
+    print(f"DEBUG: Git version: {repo.repo.git.version()}")
+    print("DEBUG: Git config:")
+    config = repo.repo.config_reader()
+    for section in config.sections():
+        for key, value in config.items(section):
+            print(f"DEBUG: {section}.{key}: {value}")
+    print("\nDEBUG: Branch status:")
+    for branch, status in repo.get_branch_status().items():
+        print(f"DEBUG: {branch}: {status.value}")
+
     result = runner.invoke(app, ["clean", "--protect", "feature/*,hotfix/*", "--no-interactive"])
+    print("\nDEBUG: Clean command output:")
+    print(result.stdout)
+
     assert result.exit_code == 0
 
     # Verify protected branches still exist
