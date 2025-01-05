@@ -40,12 +40,12 @@ jobs:
             --generate-notes \
             dist/*
 
-      - name: Publish to PyPI
-        env:
-          PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
-        run: |
-          uv pip install --system twine
-          python -m twine upload \
-            --username __token__ \
-            --password $PYPI_TOKEN \
-            dist/*
+      # - name: Publish to PyPI
+      #   env:
+      #     PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+      #   run: |
+      #     uv pip install --system twine
+      #     python -m twine upload \
+      #       --username __token__ \
+      #       --password $PYPI_TOKEN \
+      #       dist/*
