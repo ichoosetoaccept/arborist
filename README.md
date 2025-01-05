@@ -55,33 +55,22 @@ After installation:
 # Show help
 arb --help
 
-# Run in dry-run mode (no changes made)
-arb --dry-run
+# List all branches with their cleanup status
+arb list
 
-# Run interactively (default)
-arb
-
-# Run non-interactively
-arb --no-interactive
-
-# Skip repository optimization
-arb --skip-gc
+# Clean up merged and gone branches
+arb clean
 ```
 
 ## How It Works
 
-1. **Fetch and Prune**: Updates repository state and removes references to deleted remote branches
-2. **Clean Gone Branches**: Removes local branches whose remote tracking branches no longer exist
-3. **Clean Merged Branches**: Removes local branches that have been fully merged into protected branches
-4. **Optimize Repository**: Runs garbage collection and pruning to maintain repository health
+1. **List Branches**: Shows all branches with their cleanup status
+2. **Clean Branches**: Removes local branches that meet cleanup criteria
 
 ## Safety Features
 
-- Interactive by default - asks for confirmation before deleting branches
 - Never deletes protected branches (main by default)
 - Only deletes branches that are fully merged or have gone remotes
-- Provides dry-run mode to preview changes
-- Maintains Git's reflog for recovery (default: 90 days)
 
 ## Recovery
 

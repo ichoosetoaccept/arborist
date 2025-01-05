@@ -1,4 +1,19 @@
+fail_fast: true  # Stop running hooks after the first failure
+
 repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.6
+    hooks:
+      # Run the linter.
+      - id: ruff
+        types_or: [python, pyi]
+        args: [--fix]
+        stages: [pre-commit]
+      # Run the formatter.
+      - id: ruff-format
+        types_or: [python, pyi]
+        stages: [pre-commit]
+
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
@@ -36,24 +51,11 @@ repos:
       - id: gitlint
         stages: [commit-msg]
 
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.5
-    hooks:
-      # Run the linter.
-      - id: ruff
-        types_or: [python, pyi]
-        args: [--fix]
-        stages: [pre-commit]
-      # Run the formatter.
-      - id: ruff-format
-        types_or: [python, pyi]
-        stages: [pre-commit]
-
   - repo: local
     hooks:
       - id: pytest
         name: pytest
-        entry: pytest
+        entry: uv run pytest
         language: system
         types: [python]
         pass_filenames: false
@@ -61,14 +63,14 @@ repos:
 
       - id: branch-name
         name: Check branch naming convention
-        entry: python -c 'from git import Repo; import sys, re; repo = Repo("."); branch = repo.active_branch.name; patterns = ["^feature/", "^bugfix/", "^hotfix/", "^release/", "^ci/", "^refactor/", "^main$"]; sys.exit(1) if not any(re.match(p, branch) for p in patterns) else print(f"Branch name {branch} follows convention")'
+        entry: uv run python -c 'from git import Repo; import sys, re; repo = Repo("."); branch = repo.active_branch.name; patterns = ["^feature/", "^bugfix/", "^hotfix/", "^release/", "^ci/", "^refactor/", "^main$"]; sys.exit(1) if not any(re.match(p, branch) for p in patterns) else print(f"Branch name {branch} follows convention")'
         language: system
         pass_filenames: false
         stages: [pre-commit]
 
       - id: no-commit-to-main
         name: Prevent commits to main branch
-        entry: python -c 'from git import Repo; import sys; repo = Repo("."); sys.exit(1) if repo.active_branch.name == "main" else 0'
+        entry: uv run python -c 'from git import Repo; import sys; repo = Repo("."); sys.exit(1) if repo.active_branch.name == "main" else 0'
         language: system
         stages: [pre-commit]
         pass_filenames: false
