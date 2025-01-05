@@ -132,3 +132,30 @@ def test_cannot_delete_main_branch_with_force(test_env: tuple[Path, Path]) -> No
     # Verify main branch still exists
     branches = repo.get_branch_status()
     assert "main" in branches
+
+
+def test_skip_internal_git_refs(test_repo: Path) -> None:
+    """Test that internal Git refs are skipped."""
+    repo = GitRepo(test_repo)
+    status = repo.get_branch_status()
+
+    # Verify no internal refs are present
+    for branch_name in status:
+        assert not branch_name.startswith("heads/"), f"Found internal ref: {branch_name}"
+        assert not branch_name.startswith("remotes/"), f"Found internal ref: {branch_name}"
+
+
+def test_delete_nonexistent_remote_branch(test_repo: Path) -> None:
+    """Test deleting a nonexistent remote branch."""
+    repo = GitRepo(test_repo)
+    # Try to delete a nonexistent remote branch
+    result = repo._delete_branch("origin/nonexistent", BranchStatus.GONE)
+    assert not result, "Should return False when deleting nonexistent remote branch"
+
+
+def test_delete_nonexistent_local_branch(test_repo: Path) -> None:
+    """Test deleting a nonexistent local branch."""
+    repo = GitRepo(test_repo)
+    # Try to delete a nonexistent local branch
+    result = repo._delete_branch("nonexistent", BranchStatus.GONE)
+    assert not result, "Should return False when deleting nonexistent local branch"

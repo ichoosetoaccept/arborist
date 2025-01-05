@@ -60,6 +60,10 @@ class GitRepo:
             # Get all local branches
             local_branches = self.repo.git.branch("--format=%(refname:short)").splitlines()
             for branch_name in local_branches:
+                # Skip internal Git refs
+                if branch_name.startswith("heads/") or branch_name.startswith("remotes/"):
+                    continue
+
                 # Special handling for main branch
                 if branch_name == "main":
                     status[branch_name] = BranchStatus.EMPTY
@@ -194,10 +198,13 @@ class GitRepo:
             # Handle remote branches
             if branch_name.startswith("origin/"):
                 remote_name, remote_branch = branch_name.split("/", 1)
-                remote = self.repo.remote(remote_name)
-                # Delete remote branch by pushing an empty reference
-                remote.push(refspec=f":{remote_branch}")
-                return True
+                try:
+                    remote = self.repo.remote(remote_name)
+                    # Delete remote branch by pushing an empty reference
+                    remote.push(refspec=f":{remote_branch}")
+                    return True
+                except GitCommandError:
+                    return False
 
             # Delete the local branch
             try:

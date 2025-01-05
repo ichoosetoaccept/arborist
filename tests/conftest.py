@@ -111,3 +111,10 @@ def test_env(tmp_path: Path) -> Generator[tuple[Path, Path], None, None]:
     yield local_path, remote_path
 
     # Cleanup is handled by pytest's tmp_path fixture
+
+
+@pytest.fixture
+def test_repo(test_env: tuple[Path, Path]) -> Path:
+    """Create a test repository with various branch scenarios."""
+    local_path, _ = test_env
+    return local_path
