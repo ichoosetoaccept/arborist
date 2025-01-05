@@ -95,3 +95,9 @@ jobs:
             https://api.github.com/repos/${{ github.repository }}/git/refs \
             -d "{\"ref\":\"refs/tags/${{ needs.version.outputs.new_version }}\",\"sha\":\"${{ github.sha }}\"}"
           echo "Tag created successfully"
+
+      - name: Trigger release workflow
+        run: |
+          gh workflow run release.yml --ref main --field tag=${{ needs.version.outputs.new_version }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
