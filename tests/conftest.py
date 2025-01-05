@@ -93,7 +93,15 @@ def test_env(tmp_path: Path) -> Generator[tuple[Path, Path], None, None]:
 
     # Create a branch that will be deleted in remote
     create_branch("feature/gone", "Gone branch content")
+    # Set up tracking branch configuration
+    local_repo.git.branch("--set-upstream-to=origin/feature/gone", "feature/gone")
     origin.push(":feature/gone")  # Delete in remote
+
+    # Debug: Print branch and tracking info
+    print("\nDEBUG: Branch and tracking info:")
+    print(local_repo.git.branch("-vv"))
+    print("\nDEBUG: Remote branches:")
+    print(local_repo.git.branch("-r"))
 
     # Create a remote-only branch
     main_branch.checkout()
