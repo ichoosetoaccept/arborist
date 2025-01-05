@@ -202,12 +202,26 @@ def test_unpushed_commits_not_gone(test_env: tuple[Path, Path]) -> None:
 
 def test_fetch_from_remotes(test_env: tuple[Path, Path]) -> None:
     """Test fetching from remotes."""
-    local_path, remote_path = test_env
+    local_path, _ = test_env
     repo = GitRepo(local_path)
+    test_repo = repo.repo
 
-    # Create a new branch in the remote
-    remote_repo = Repo(remote_path)
-    remote_repo.git.branch("test/remote-only")
+    # Create and push a test branch
+    test_repo.git.checkout("main")
+    test_repo.git.checkout("-b", "test/remote-only")
+    test_file = local_path / "test.txt"
+    test_file.write_text("test content")
+    test_repo.index.add(["test.txt"])
+    test_repo.index.commit("Add test branch")
+    test_repo.git.push("origin", "test/remote-only")
+
+    # Merge the branch into main
+    test_repo.git.checkout("main")
+    test_repo.git.merge("test/remote-only", "--no-ff")  # Use --no-ff to force a merge commit
+    test_repo.git.push("origin", "main")
+
+    # Delete the local branch since it's now merged
+    test_repo.delete_head("test/remote-only")
 
     # Fetch should succeed and make the branch visible
     repo.fetch_from_remotes()
