@@ -159,3 +159,39 @@ def test_delete_nonexistent_local_branch(test_repo: Path) -> None:
     # Try to delete a nonexistent local branch
     result = repo._delete_branch("nonexistent", BranchStatus.GONE)
     assert not result, "Should return False when deleting nonexistent local branch"
+
+
+def test_unpushed_commits_not_gone(test_env: tuple[Path, Path]) -> None:
+    """Test that a branch with unpushed commits is not marked as gone even if remote is gone."""
+    local_path, _ = test_env
+    repo = GitRepo(local_path)
+    test_repo = repo.repo
+
+    # Create and push a test branch
+    test_repo.git.checkout("-b", "test/unpushed")
+    test_file = local_path / "test_unpushed.txt"
+    test_file.write_text("initial content")
+    test_repo.index.add(["test_unpushed.txt"])
+    test_repo.index.commit("Initial commit")
+    test_repo.git.push("-u", "origin", "test/unpushed")
+
+    # Make a new commit without pushing
+    test_file.write_text("updated content")
+    test_repo.index.add(["test_unpushed.txt"])
+    test_repo.index.commit("Unpushed commit")
+
+    # Delete the remote branch to simulate gone remote
+    test_repo.git.push("origin", "--delete", "test/unpushed")
+
+    # Get branch status
+    status = repo.get_branch_status()
+    print("\nDEBUG: Branch status:")
+    for branch, branch_status in status.items():
+        print(f"{branch}: {branch_status.value}")
+
+    # Verify branch is not marked as gone
+    assert status["test/unpushed"] == BranchStatus.UNMERGED
+    assert not repo.is_branch_cleanable("test/unpushed")
+
+    # Switch back to main
+    test_repo.git.checkout("main")

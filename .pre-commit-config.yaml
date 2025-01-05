@@ -7,11 +7,12 @@ repos:
       # Run the linter.
       - id: ruff
         types_or: [python, pyi]
-        args: [--fix]
+        args: [--fix, --exit-non-zero-on-fix]
         stages: [pre-commit]
       # Run the formatter.
       - id: ruff-format
         types_or: [python, pyi]
+        verbose: true
         stages: [pre-commit]
 
   - repo: https://github.com/pre-commit/pre-commit-hooks

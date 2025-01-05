@@ -88,8 +88,30 @@ class GitRepo:
                                 # Try to get the remote branch
                                 self.repo.git.rev_parse(remote_ref)
                             except GitCommandError:
-                                # Remote branch doesn't exist
-                                status[branch_name] = BranchStatus.GONE
+                                # Remote branch doesn't exist, check if it's marked as gone
+                                try:
+                                    # Get branch status with -vv
+                                    branch_info = self.repo.git.branch("-vv", "--list", branch_name)
+                                    if ": gone]" in branch_info:
+                                        # Branch is marked as gone in Git
+                                        status[branch_name] = BranchStatus.GONE
+                                    else:
+                                        # Check for unpushed commits
+                                        try:
+                                            # Get number of commits that haven't been pushed
+                                            unpushed = self.repo.git.rev_list("--count", f"{branch_name}").strip()
+                                            if unpushed == "0":
+                                                # No unpushed commits, safe to mark as gone
+                                                status[branch_name] = BranchStatus.GONE
+                                            else:
+                                                # Has unpushed commits, mark as unmerged to prevent data loss
+                                                status[branch_name] = BranchStatus.UNMERGED
+                                        except GitCommandError:
+                                            # If we can't check, be conservative and mark as unmerged
+                                            status[branch_name] = BranchStatus.UNMERGED
+                                except GitCommandError:
+                                    # If we can't check, be conservative and mark as unmerged
+                                    status[branch_name] = BranchStatus.UNMERGED
                                 continue
                 except GitCommandError:
                     # No remote tracking configuration
