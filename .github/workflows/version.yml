@@ -72,6 +72,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -85,5 +86,8 @@ jobs:
 
       - name: Create and push tag
         run: |
+          echo "Creating tag ${{ needs.version.outputs.new_version }}"
           git tag ${{ needs.version.outputs.new_version }}
+          echo "Pushing tag to origin"
           git push origin ${{ needs.version.outputs.new_version }}
+          echo "Tag pushed successfully"
