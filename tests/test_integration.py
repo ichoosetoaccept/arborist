@@ -8,6 +8,7 @@ import tempfile
 from pathlib import Path
 
 import pytest
+from git import Actor, Repo
 from typer.testing import CliRunner
 
 from arborist.cli import app
@@ -287,3 +288,55 @@ def test_cannot_delete_main_branch_with_force(test_repo: Path, runner: CliRunner
     repo = GitRepo(test_repo)
     branches = repo.get_branch_status()
     assert "main" in branches
+
+
+def test_list_shows_latest_remote_status(test_repo: Path, runner: CliRunner) -> None:
+    """Test that list command shows latest remote branch status after remote changes."""
+    repo = GitRepo(test_repo)
+    test_repo_obj = repo.repo
+
+    # Make sure we're on main first
+    test_repo_obj.git.checkout("main")
+
+    # Create and push a test branch
+    test_repo_obj.git.checkout("-b", "test/remote-status")
+    test_file = Path(test_repo) / "test_remote_status.txt"
+    test_file.write_text("initial content")
+    test_repo_obj.index.add(["test_remote_status.txt"])
+    test_repo_obj.index.commit("Initial commit")
+    test_repo_obj.git.push("origin", "test/remote-status")
+
+    # Switch back to main
+    test_repo_obj.git.checkout("main")
+
+    # Get initial list output
+    initial_result = runner.invoke(app, ["list", "--path", str(test_repo)])
+    assert initial_result.exit_code == 0
+    assert "test/remote-status" in initial_result.stdout
+    assert "unmerged" in initial_result.stdout.lower()
+
+    # Create a separate clone to simulate remote changes
+    remote_clone_path = test_repo.parent / "remote_clone"
+    remote_clone = Repo.clone_from(str(test_repo_obj.remote().url), str(remote_clone_path))
+
+    # Set up git config in remote clone
+    author = Actor("Test User", "test@example.com")
+    remote_clone.config_writer().set_value("user", "name", author.name).release()
+    remote_clone.config_writer().set_value("user", "email", author.email).release()
+
+    # Fetch and merge the branch into main in the remote clone
+    remote_clone.git.fetch("origin", "test/remote-status:test/remote-status")
+    remote_clone.git.checkout("main")
+    remote_clone.git.merge("test/remote-status", "--no-ff")  # Force a merge commit
+    remote_clone.git.push("origin", "main")  # Push the merge to origin/main
+
+    # Run list command again - it should show the branch as merged
+    final_result = runner.invoke(app, ["list", "--path", str(test_repo)])
+    assert final_result.exit_code == 0
+    assert "test/remote-status" in final_result.stdout
+    # The branch should be marked as merged in the output
+    assert "│ test/remote-status        │  merged  │" in final_result.stdout
+
+    # Clean up
+    test_repo_obj.git.checkout("main")
+    test_repo_obj.delete_head("test/remote-status")

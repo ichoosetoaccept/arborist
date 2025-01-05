@@ -37,10 +37,23 @@ class GitRepo:
             raise GitError(f"Failed to open repository: {err}") from err
 
     def fetch_from_remotes(self) -> None:
-        """Fetch latest state from all remotes."""
+        """Fetch latest state from all remotes and update local branches."""
         try:
             for remote in self.repo.remotes:
+                # Fetch from remote
                 remote.fetch()
+                # Update local references to remote branches
+                self.repo.git.remote("update", remote.name, "--prune")
+                # Pull changes for the current branch if it has an upstream
+                current = self.get_current_branch_name()
+                if current:
+                    try:
+                        tracking_branch = self.repo.active_branch.tracking_branch()
+                        if tracking_branch:
+                            self.repo.git.pull(remote.name, current)
+                    except GitCommandError:
+                        # If pull fails (e.g., merge conflicts), just continue
+                        pass
         except GitCommandError as err:
             raise GitError(f"Failed to fetch from remotes: {err}") from err
 

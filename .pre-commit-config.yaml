@@ -1,6 +1,12 @@
 fail_fast: true  # Stop running hooks after the first failure
 
 repos:
+  - repo: https://github.com/jorisroovers/gitlint
+    rev: v0.19.1
+    hooks:
+      - id: gitlint
+        stages: [commit-msg]
+
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.8.6
     hooks:
@@ -45,12 +51,6 @@ repos:
         stages: [pre-commit]
       - id: check-symlinks
         stages: [pre-commit]
-
-  - repo: https://github.com/jorisroovers/gitlint
-    rev: v0.19.1
-    hooks:
-      - id: gitlint
-        stages: [commit-msg]
 
   - repo: local
     hooks:
