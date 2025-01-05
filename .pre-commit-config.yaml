@@ -1,4 +1,19 @@
+fail_fast: true  # Stop running hooks after the first failure
+
 repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.6
+    hooks:
+      # Run the linter.
+      - id: ruff
+        types_or: [python, pyi]
+        args: [--fix]
+        stages: [pre-commit]
+      # Run the formatter.
+      - id: ruff-format
+        types_or: [python, pyi]
+        stages: [pre-commit]
+
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
@@ -35,19 +50,6 @@ repos:
     hooks:
       - id: gitlint
         stages: [commit-msg]
-
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.5
-    hooks:
-      # Run the linter.
-      - id: ruff
-        types_or: [python, pyi]
-        args: [--fix]
-        stages: [pre-commit]
-      # Run the formatter.
-      - id: ruff-format
-        types_or: [python, pyi]
-        stages: [pre-commit]
 
   - repo: local
     hooks:
