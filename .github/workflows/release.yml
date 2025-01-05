@@ -15,6 +15,13 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
+      - name: Debug trigger info
+        run: |
+          echo "Event name: ${{ github.event_name }}"
+          echo "Ref name: ${{ github.ref_name }}"
+          echo "Ref type: ${{ github.ref_type }}"
+          echo "SHA: ${{ github.sha }}"
+
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
