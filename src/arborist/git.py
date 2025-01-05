@@ -38,8 +38,13 @@ class GitRepo:
     def get_current_branch_name(self) -> str:
         """Get current branch name."""
         try:
-            return self.repo.active_branch.name
-        except (GitCommandError, TypeError) as err:
+            try:
+                return self.repo.active_branch.name
+            except TypeError:
+                # We're in a detached HEAD state
+                # In this case, we'll return an empty string since we don't want to protect a detached HEAD
+                return ""
+        except (GitCommandError, ValueError) as err:
             raise GitError(f"Failed to get current branch: {err}") from err
 
     def get_branch_status(self) -> dict[str, BranchStatus]:
