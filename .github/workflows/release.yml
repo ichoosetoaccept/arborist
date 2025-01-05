@@ -39,7 +39,7 @@ jobs:
       - name: Install dependencies
         run: |
           uv sync
-          uv sync --extras dev
+          uv sync --extra dev
       - name: Run tests
         run: uv run pytest tests/ -v --cov=src/arborist --cov-report=term-missing
 
