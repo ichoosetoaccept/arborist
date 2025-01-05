@@ -172,3 +172,26 @@ def test_force_delete_unmerged(test_repo: Path, runner: CliRunner) -> None:
     repo = GitRepo(test_repo)
     branches = repo.get_branch_status()
     assert "feature/test" not in branches
+
+
+def test_cannot_delete_main_branch_with_force(test_repo: Path, runner: CliRunner) -> None:
+    """Test that main branch cannot be deleted even with force."""
+    # First verify the repo state
+    repo = GitRepo(test_repo)
+    print("\nDEBUG: Initial repo state:")
+    print(f"DEBUG: Current branch: {repo.get_current_branch_name()}")
+    print("DEBUG: Branch status:")
+    for branch, status in repo.get_branch_status().items():
+        print(f"DEBUG: {branch}: {status.value}")
+
+    # Try to force delete main branch
+    result = runner.invoke(app, ["clean", "--force", "--no-interactive", "--protect", "", "--path", str(test_repo)])
+    print("\nDEBUG: Clean command output:")
+    print(result.stdout)
+
+    assert result.exit_code == 0
+
+    # Verify main branch still exists
+    repo = GitRepo(test_repo)
+    branches = repo.get_branch_status()
+    assert "main" in branches

@@ -185,6 +185,10 @@ class GitRepo:
     def _delete_branch(self, branch_name: str, status: BranchStatus) -> bool:
         """Delete a single branch. Returns True if successful."""
         try:
+            # Never delete main branch
+            if branch_name == "main" or (branch_name.startswith("origin/") and branch_name.split("/", 1)[1] == "main"):
+                return False
+
             # Handle remote branches
             if branch_name.startswith("origin/"):
                 remote_name, remote_branch = branch_name.split("/", 1)

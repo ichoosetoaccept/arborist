@@ -119,3 +119,16 @@ def test_delete_remote_branch(test_env: tuple[Path, Path]) -> None:
     # Verify branch is gone from remote
     remote_branches = [ref.remote_head for ref in repo.repo.remote().refs]
     assert "feature/remote" not in remote_branches
+
+
+def test_cannot_delete_main_branch_with_force(test_env: tuple[Path, Path]) -> None:
+    """Test that main branch cannot be deleted even with force."""
+    local_path, _ = test_env
+    repo = GitRepo(local_path)
+
+    # Try to delete main branch directly
+    assert not repo._delete_branch("main", BranchStatus.MERGED)
+
+    # Verify main branch still exists
+    branches = repo.get_branch_status()
+    assert "main" in branches
