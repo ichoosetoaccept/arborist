@@ -3,9 +3,10 @@
 from enum import Enum
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 from git import GitCommandError, InvalidGitRepositoryError, Repo
+from rich.table import Table
 
 
 class BranchStatus(Enum):
@@ -35,6 +36,14 @@ class GitRepo:
         except (GitCommandError, ValueError, InvalidGitRepositoryError) as err:
             raise GitError(f"Failed to open repository: {err}") from err
 
+    def fetch_from_remotes(self) -> None:
+        """Fetch latest state from all remotes."""
+        try:
+            for remote in self.repo.remotes:
+                remote.fetch()
+        except GitCommandError as err:
+            raise GitError(f"Failed to fetch from remotes: {err}") from err
+
     def get_current_branch_name(self) -> str:
         """Get current branch name."""
         try:
@@ -52,10 +61,6 @@ class GitRepo:
         try:
             status: dict[str, BranchStatus] = {}
             current = self.get_current_branch_name()
-
-            # Fetch from all remotes to ensure we have the latest state
-            for remote in self.repo.remotes:
-                remote.fetch()
 
             # Get all local branches
             local_branches = self.repo.git.branch("--format=%(refname:short)").splitlines()
@@ -153,6 +158,11 @@ class GitRepo:
                 if branch_name in status:
                     continue
 
+                # Special handling for origin/main
+                if branch_name == "origin/main":
+                    status[branch_name] = BranchStatus.EMPTY
+                    continue
+
                 try:
                     # Get the branch tip and check merge status
                     branch_tip = self.repo.git.rev_parse(branch_name).strip()
@@ -244,45 +254,45 @@ class GitRepo:
         protect: list[str],
         force: bool = False,
         interactive: bool = True,
-        dry_run: bool = False,
-    ) -> None:
-        """Clean up merged and gone branches."""
+    ) -> Tuple[Table, list[str]]:
+        """Clean up merged and gone branches.
+
+        Returns:
+            A tuple of (preview_table, deleted_branches).
+            If interactive is True, the branches will only be deleted after user confirmation.
+        """
         try:
             # Get branches to delete
             to_delete = self._get_branches_to_delete(protect, force)
             if not to_delete:
-                return
+                return None, []
 
-            # Show what will be deleted
-            if dry_run:
-                print("\nDry run - would delete these branches:")
-            else:
-                print("\nBranches to delete:")
-            for branch, status in to_delete.items():
-                if dry_run:
-                    print(f"Would delete branch: {branch} ({status.value})")
-                else:
-                    print(f"  {branch} ({status.value})")
+            # Create a table for branches to delete
+            table = Table(
+                title="Branches to Delete",
+                show_header=True,
+                header_style="bold",
+                title_style="bold blue",
+                show_edge=True,
+            )
+            table.add_column("Branch", style="cyan")
+            table.add_column("Status", style="magenta", justify="center")
 
-            # Confirm deletion if in interactive mode and not dry run
-            if not dry_run and interactive:
-                confirm = input("\nProceed with deletion? [y/N] ")
-                if confirm.lower() != "y":
-                    print("\nOperation cancelled")
-                    return
+            # Add branches to table
+            for branch, status in sorted(to_delete.items()):
+                status_display = "[green]merged[/green]" if status == BranchStatus.MERGED else "[bright_yellow]gone[/bright_yellow]"
+                table.add_row(branch, status_display)
 
-            # Delete branches if not in dry run mode
-            if not dry_run:
+            # If not interactive, delete branches immediately
+            if not interactive:
                 deleted = []
                 for branch, status in to_delete.items():
                     if self._delete_branch(branch, status):
                         deleted.append(branch)
-                if deleted:
-                    print(f"\nSuccessfully deleted {len(deleted)} branch(es):")
-                    for branch in deleted:
-                        print(f"  {branch}")
-                else:
-                    print("\nNo branches were deleted")
+                return table, deleted
+
+            # Otherwise, return the table and no deleted branches
+            return table, []
 
         except GitCommandError as err:
             raise GitError(f"Failed to clean branches: {err}") from err

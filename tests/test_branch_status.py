@@ -2,7 +2,10 @@
 
 from pathlib import Path
 
-from arborist.git import BranchStatus, GitRepo
+import pytest
+from git import Actor, Repo
+
+from arborist.git import BranchStatus, GitError, GitRepo
 
 
 def test_main_branch_empty_status(test_env: tuple[Path, Path]) -> None:
@@ -195,3 +198,62 @@ def test_unpushed_commits_not_gone(test_env: tuple[Path, Path]) -> None:
 
     # Switch back to main
     test_repo.git.checkout("main")
+
+
+def test_fetch_from_remotes(test_env: tuple[Path, Path]) -> None:
+    """Test fetching from remotes."""
+    local_path, remote_path = test_env
+    repo = GitRepo(local_path)
+
+    # Create a new branch in the remote
+    remote_repo = Repo(remote_path)
+    remote_repo.git.branch("test/remote-only")
+
+    # Fetch should succeed and make the branch visible
+    repo.fetch_from_remotes()
+    remote_branches = repo.repo.git.branch("-r", "--format=%(refname:short)").splitlines()
+    assert "origin/test/remote-only" in remote_branches
+
+
+def test_fetch_from_remotes_no_remote(tmp_path: Path) -> None:
+    """Test fetching when there are no remotes."""
+    # Create a new repo without remotes
+    local_repo = Repo.init(tmp_path)
+    repo = GitRepo(tmp_path)
+
+    # Set up git config
+    author = Actor("Test User", "test@example.com")
+    local_repo.config_writer().set_value("user", "name", author.name).release()
+    local_repo.config_writer().set_value("user", "email", author.email).release()
+
+    # Create initial commit
+    readme = tmp_path / "README.md"
+    readme.write_text("# Test Repository")
+    local_repo.index.add(["README.md"])
+    local_repo.index.commit("Initial commit", author=author)
+
+    # Fetch should succeed even with no remotes
+    repo.fetch_from_remotes()
+    assert len(repo.repo.remotes) == 0
+
+
+def test_fetch_from_remotes_error(test_env: tuple[Path, Path]) -> None:
+    """Test handling of fetch errors."""
+    local_path, _ = test_env
+    repo = GitRepo(local_path)
+
+    # Simulate a fetch error by changing the remote URL to an invalid one
+    repo.repo.remote("origin").set_url("invalid://url")
+
+    # Fetch should raise GitError
+    with pytest.raises(GitError) as exc_info:
+        repo.fetch_from_remotes()
+    assert "Failed to fetch from remotes" in str(exc_info.value)
+
+
+def test_origin_main_empty_status(test_env: tuple[Path, Path]) -> None:
+    """Test that origin/main branch has empty status."""
+    local_path, _ = test_env
+    repo = GitRepo(local_path)
+    status = repo.get_branch_status()
+    assert status["origin/main"] == BranchStatus.EMPTY

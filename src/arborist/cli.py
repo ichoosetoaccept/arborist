@@ -84,9 +84,11 @@ def create_branch_table(title: str, branch_width: int, status_width: int, commit
 @app.command()
 def list(
     path: Annotated[Path, typer.Option(help="Path to git repository")] = Path("."),
+    silent: bool = typer.Option(False, hidden=True),  # Hidden parameter for internal use
 ) -> None:
     """List all branches with their cleanup status."""
     repo = get_repo(path)
+    repo.fetch_from_remotes()  # Ensure we have latest state
     status_dict = repo.get_branch_status()
 
     # Split branches into local and remote
@@ -163,39 +165,40 @@ def list(
             cleanable_display,
         )
 
-    # Display tables
-    console.print(local_table)
-    console.print(remote_table)
+    if not silent:
+        # Display tables
+        console.print(local_table)
+        console.print(remote_table)
 
-    # Show message about cleanable branches
-    if cleanable_local or cleanable_remote:
-        cleanable_branches = []
-        if cleanable_local:
-            cleanable_branches.extend(cleanable_local)
-        if cleanable_remote:
-            cleanable_branches.extend(cleanable_remote)
+        # Show message about cleanable branches
+        if cleanable_local or cleanable_remote:
+            cleanable_branches = []
+            if cleanable_local:
+                cleanable_branches.extend(cleanable_local)
+            if cleanable_remote:
+                cleanable_branches.extend(cleanable_remote)
 
-        msg = "The following branches would be deleted if you run [dim]`arb clean`[/dim] next:\n" + "\n".join(
-            f"  [blue]{branch}[/blue]" for branch in cleanable_branches
-        )
-        console.print(
-            Panel(
-                msg,
-                title="Cleanable Branches",
-                title_align="left",
-                padding=(0, 2),
-                expand=False,
+            msg = "The following branches would be deleted if you run [dim]`arb clean`[/dim] next:\n" + "\n".join(
+                f"  [blue]{branch}[/blue]" for branch in cleanable_branches
             )
-        )
-    else:
-        console.print(
-            Panel(
-                "[green]Your branches are clean ✨[/green]",
-                style="green",
-                padding=(0, 2),
-                expand=False,
+            console.print(
+                Panel(
+                    msg,
+                    title="Cleanable Branches",
+                    title_align="left",
+                    padding=(0, 2),
+                    expand=False,
+                )
             )
-        )
+        else:
+            console.print(
+                Panel(
+                    "[green]Your branches are clean ✨[/green]",
+                    style="green",
+                    padding=(0, 2),
+                    expand=False,
+                )
+            )
 
 
 @app.command()
@@ -204,14 +207,66 @@ def clean(
     protect: str = typer.Option("main", "--protect", "-p", help="Comma-separated list of branch patterns to protect"),
     force: bool = typer.Option(False, "--force", "-f", help="Force deletion of unmerged branches"),
     no_interactive: bool = typer.Option(False, "--no-interactive", "-y", help="Skip confirmation prompts"),
-    dry_run: bool = typer.Option(False, "--dry-run", "-n", help="Show what would be done without doing it"),
 ) -> None:
     """Clean up merged and gone branches."""
     repo = get_repo(path)
     protect_list = [p.strip() for p in protect.split(",")]
 
+    # Run list command silently to ensure we have latest state
+    list(path=path, silent=True)
+
     try:
-        repo.clean(protect_list, force, not no_interactive, dry_run)
+        # Get preview table and potentially deleted branches
+        preview_table, deleted = repo.clean(protect_list, force, not no_interactive)
+        if not preview_table:
+            console.print(
+                Panel(
+                    "[green]Your branches are clean ✨[/green]",
+                    style="green",
+                    padding=(0, 2),
+                    expand=False,
+                )
+            )
+            return
+
+        # Show preview table
+        console.print()  # Add a blank line
+        console.print(preview_table)
+
+        # If interactive, ask for confirmation
+        if not no_interactive:
+            console.print()  # Add a blank line
+            confirm = input("Proceed with deletion? [y/N] ")
+            if confirm.lower() != "y":
+                console.print("\n[yellow]Operation cancelled[/yellow] 🛑")
+                return
+
+            # Delete branches after confirmation
+            deleted = []
+            for branch in sorted(preview_table.rows):
+                branch_name = branch[0]  # First column contains branch name
+                if repo._delete_branch(branch_name, repo.get_branch_status()[branch_name]):
+                    deleted.append(branch_name)
+
+        # Show results
+        if deleted:
+            # Create a table for deleted branches
+            result_table = Table(
+                title=f"Successfully deleted {len(deleted)} branch(es) 🧹",
+                show_header=True,
+                header_style="bold",
+                title_style="bold green",
+                show_edge=True,
+            )
+            result_table.add_column("Branch", style="cyan")
+            for branch in sorted(deleted):
+                result_table.add_row(branch)
+
+            console.print()  # Add a blank line
+            console.print(result_table)
+        else:
+            console.print("\n[yellow]No branches were deleted[/yellow] 🤔")
+
     except GitError as err:
         print(f"Error: {err}")
         raise typer.Exit(code=1) from err

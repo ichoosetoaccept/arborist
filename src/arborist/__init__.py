@@ -1,14 +1,11 @@
-"""Arborist - A focused git branch cleanup tool.
+"""Git branch management tool.
 
-A simple tool for cleaning up git branches that are merged or gone.
 Features:
-- List branch status (merged, unmerged, gone)
+- List all branches with their status (merged, gone, etc.)
 - Clean up merged and gone branches
-- Protect branches using glob patterns
-- Interactive mode with confirmation prompts
-- Dry run option to preview changes
+- Interactive mode for safe branch deletion
+- Branch protection patterns
+- Force option for unmerged branches
 """
 
-from arborist.git import BranchStatus, GitError, GitRepo
-
-__all__ = ["GitRepo", "GitError", "BranchStatus"]
+__version__ = "0.2.6"
