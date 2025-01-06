@@ -1,0 +1,29 @@
+name: PR Checks
+
+on:
+  pull_request:
+    types: [opened, labeled, unlabeled, synchronize]
+
+jobs:
+  check-labels:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: mheap/github-action-required-labels@v5
+        with:
+          mode: minimum
+          count: 1
+          labels: |
+            bug
+            bugfix
+            fix
+            enhancement
+            feature
+            breaking-change
+            documentation
+            performance
+            maintenance
+            dependencies
+          add_comment: true
