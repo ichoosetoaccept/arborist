@@ -34,10 +34,14 @@ jobs:
       - name: Create GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CONFIG_FILE: .github/release-notes-config.yml
         run: |
           gh release create ${{ inputs.tag }} \
             --title "Release ${{ inputs.tag }}" \
-            --generate-notes \
+            --notes-file <(gh api repos/${{ github.repository }}/releases/generate-notes \
+              -F tag_name=${{ inputs.tag }} \
+              -F configuration_file_path=$CONFIG_FILE \
+              --jq .body) \
             ./dist/*
 
       # - name: Publish to PyPI
