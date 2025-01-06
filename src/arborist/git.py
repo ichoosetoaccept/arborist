@@ -151,8 +151,8 @@ class GitRepo:
         try:
             # First check if local main is up to date
             if not self._check_main_branch_status():
-                message = (
-                    "Local main branch is behind remote. You can either:\n\n"
+                message = "Local main branch is behind remote. " + (
+                    "Since you're on a different branch with uncommitted changes, you can either:\n\n"
                     "A) Let arborist handle it automatically (recommended):\n"
                     "   This will:\n"
                     "   1. Stash any uncommitted changes\n"
@@ -164,8 +164,9 @@ class GitRepo:
                     "   2. Switch to main: git checkout main\n"
                     "   3. Update main: git pull origin main\n"
                     "   4. Switch back to your branch\n"
-                    "   5. Run 'arb list' again\n\n"
-                    "Would you like arborist to handle it automatically? [y/N] "
+                    "   5. Run 'arb list' again"
+                    if self._has_uncommitted_changes() and self.get_current_branch_name() != "main"
+                    else "Simply run: git pull origin main"
                 )
                 raise GitError(message, needs_confirmation=True)
 
