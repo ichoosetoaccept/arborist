@@ -173,12 +173,18 @@ class GitRepo:
             current = self.get_current_branch_name()
 
             # Get all local branches
-            local_branches = self.repo.git.branch("--format=%(refname:short)").splitlines()
+            local_branches = [
+                branch
+                for branch in self.repo.git.branch("--format=%(refname:short)").splitlines()
+                if not (
+                    branch.startswith("heads/")
+                    or branch.startswith("remotes/")
+                    or branch == "origin"  # Skip the special origin ref
+                    or branch == "HEAD"  # Skip HEAD ref
+                    or branch.endswith("/HEAD")  # Skip remote HEAD refs
+                )
+            ]
             for branch_name in local_branches:
-                # Skip internal Git refs
-                if branch_name.startswith("heads/") or branch_name.startswith("remotes/"):
-                    continue
-
                 # Special handling for main branch
                 if branch_name == "main":
                     status[branch_name] = BranchStatus.EMPTY
