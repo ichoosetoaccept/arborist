@@ -89,11 +89,38 @@ def list(
     """List all branches with their cleanup status."""
     repo = get_repo(path)
     repo.fetch_from_remotes()  # Ensure we have latest state
-    status_dict = repo.get_branch_status()
+
+    try:
+        status_dict = repo.get_branch_status()
+    except GitError as err:
+        if err.needs_confirmation:
+            # Print without the confirmation prompt
+            message_parts = str(err).split("[y/N]")
+            print(f"[yellow]{message_parts[0].strip()}[/yellow]")
+
+            # Ask for confirmation
+            confirm = input("Would you like arborist to handle it automatically? [y/N] ")
+            if confirm.lower() == "y":
+                try:
+                    repo._update_main_branch()
+                    # Fetch again to ensure we have the latest state
+                    repo.fetch_from_remotes()
+                    # Try getting branch status again
+                    status_dict = repo.get_branch_status()
+                except GitError as update_err:
+                    print(f"[red]Error:[/red] {update_err}")
+                    raise typer.Exit(code=1) from update_err
+            else:
+                # User chose manual update
+                print("\n[yellow]Please update main branch manually and run 'arb list' again[/yellow]")
+                raise typer.Exit(code=1) from None  # Explicitly suppress the context
+        else:
+            print(f"[red]Error:[/red] {err}")
+            raise typer.Exit(code=1) from err
 
     # Split branches into local and remote
-    local_branches = {k: v for k, v in status_dict.items() if not k.startswith("origin/")}
-    remote_branches = {k: v for k, v in status_dict.items() if k.startswith("origin/")}
+    local_branches = {k: v for k, v in status_dict.items() if not k.startswith("origin/") and k not in ["origin", "HEAD"]}
+    remote_branches = {k: v for k, v in status_dict.items() if k.startswith("origin/") and not k.endswith("/HEAD")}
 
     current = repo.get_current_branch_name()
     cleanable_local = []
@@ -244,7 +271,7 @@ def clean(
             # Delete branches after confirmation
             deleted = []
             for branch in sorted(preview_table.rows):
-                branch_name = branch[0]  # First column contains branch name
+                branch_name = branch.cells[0].renderable  # Access the branch name from the Row object's cells
                 if repo._delete_branch(branch_name, repo.get_branch_status()[branch_name]):
                     deleted.append(branch_name)
 

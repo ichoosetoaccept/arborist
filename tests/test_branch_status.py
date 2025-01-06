@@ -271,3 +271,37 @@ def test_origin_main_empty_status(test_env: tuple[Path, Path]) -> None:
     repo = GitRepo(local_path)
     status = repo.get_branch_status()
     assert status["origin/main"] == BranchStatus.EMPTY
+
+
+def test_get_branch_status_filters_special_refs(test_env: tuple[Path, Path]) -> None:
+    """Test that get_branch_status properly filters out special refs like 'origin'."""
+    local_path, _ = test_env
+    repo = GitRepo(local_path)
+
+    # Create the problematic "origin" ref that we see in real repositories
+    test_repo = repo.repo
+    test_repo.git.update_ref("refs/heads/origin", "HEAD")
+
+    # Get branch status
+    status = repo.get_branch_status()
+
+    # The "origin" ref should be filtered out and not appear in the status
+    # This test is currently failing because our code is not filtering it out
+    assert "origin" not in status, "The 'origin' ref should be filtered out"
+    assert "HEAD" not in status
+    assert "remotes/origin/HEAD" not in status
+
+    # Verify we have the expected branches
+    expected_branches = {
+        "main",
+        "feature/test",
+        "feature/merged",
+        "feature/current",
+        "feature/gone",
+        "origin/main",
+        "origin/feature/test",
+        "origin/feature/merged",
+        "origin/feature/current",
+        "origin/feature/remote",
+    }
+    assert set(status.keys()) == expected_branches

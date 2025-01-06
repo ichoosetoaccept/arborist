@@ -340,3 +340,80 @@ def test_list_shows_latest_remote_status(test_repo: Path, runner: CliRunner) -> 
     # Clean up
     test_repo_obj.git.checkout("main")
     test_repo_obj.delete_head("test/remote-status")
+
+
+def test_list_warns_when_main_behind(test_repo: Path, runner: CliRunner) -> None:
+    """Test that list command warns when local main is behind remote."""
+    repo = GitRepo(test_repo)
+    test_repo_obj = repo.repo
+
+    # Create a separate clone to simulate remote changes
+    remote_clone_path = test_repo.parent / "remote_clone"
+    remote_clone = Repo.clone_from(str(test_repo_obj.remote().url), str(remote_clone_path))
+
+    # Set up git config in remote clone
+    author = Actor("Test User", "test@example.com")
+    remote_clone.config_writer().set_value("user", "name", author.name).release()
+    remote_clone.config_writer().set_value("user", "email", author.email).release()
+
+    # Make a change in the remote clone and push to main
+    test_file = remote_clone_path / "test_main_behind.txt"
+    test_file.write_text("test content")
+    remote_clone.index.add(["test_main_behind.txt"])
+    remote_clone.index.commit("Add test file to main")
+    remote_clone.git.push("origin", "main")
+
+    # Run list command - it should warn about main being behind and offer automatic update
+    result = runner.invoke(app, ["list", "--path", str(test_repo)], input="n\n")  # Choose manual update
+    assert result.exit_code == 1  # Should exit with error
+    assert "Local main branch is behind remote" in result.stdout
+    assert "Let arborist handle it automatically" in result.stdout
+    assert "Do it manually" in result.stdout
+    assert "Please update main branch manually" in result.stdout
+
+    # Try again with automatic update
+    result = runner.invoke(app, ["list", "--path", str(test_repo)], input="y\n")  # Choose automatic update
+    assert result.exit_code == 0
+    # Verify we can see the branch status table
+    assert "Local Branches" in result.stdout
+    assert "Remote Branches" in result.stdout
+    # Verify the branch status is correct
+    assert "feature/current (current)" in result.stdout
+    assert "origin/main" in result.stdout
+
+
+def test_list_handles_uncommitted_changes(test_repo: Path, runner: CliRunner) -> None:
+    """Test that list command handles uncommitted changes when updating main."""
+    repo = GitRepo(test_repo)
+    test_repo_obj = repo.repo
+
+    # Create a separate clone to simulate remote changes
+    remote_clone_path = test_repo.parent / "remote_clone"
+    remote_clone = Repo.clone_from(str(test_repo_obj.remote().url), str(remote_clone_path))
+
+    # Set up git config in remote clone
+    author = Actor("Test User", "test@example.com")
+    remote_clone.config_writer().set_value("user", "name", author.name).release()
+    remote_clone.config_writer().set_value("user", "email", author.email).release()
+
+    # Make a change in the remote clone and push to main
+    test_file = remote_clone_path / "test_main_behind.txt"
+    test_file.write_text("test content")
+    remote_clone.index.add(["test_main_behind.txt"])
+    remote_clone.index.commit("Add test file to main")
+    remote_clone.git.push("origin", "main")
+
+    # Create uncommitted changes in the local repo
+    local_file = test_repo / "uncommitted.txt"
+    local_file.write_text("uncommitted changes")
+    test_repo_obj.index.add(["uncommitted.txt"])
+
+    # Run list command with automatic update
+    result = runner.invoke(app, ["list", "--path", str(test_repo)], input="y\n")
+    assert result.exit_code == 0
+    assert "Local Branches" in result.stdout
+    assert "Remote Branches" in result.stdout
+
+    # Verify our uncommitted changes are still there
+    assert local_file.read_text() == "uncommitted changes"
+    assert "uncommitted.txt" in test_repo_obj.git.status("--porcelain")

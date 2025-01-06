@@ -21,7 +21,15 @@ class BranchStatus(Enum):
 class GitError(Exception):
     """Git operation error."""
 
-    pass
+    def __init__(self, message: str, needs_confirmation: bool = False) -> None:
+        """Initialize error.
+
+        Args:
+            message: Error message
+            needs_confirmation: Whether this error needs user confirmation to proceed
+        """
+        super().__init__(message)
+        self.needs_confirmation = needs_confirmation
 
 
 class GitRepo:
@@ -35,6 +43,75 @@ class GitRepo:
                 raise GitError("Cannot operate on bare repository")
         except (GitCommandError, ValueError, InvalidGitRepositoryError) as err:
             raise GitError(f"Failed to open repository: {err}") from err
+
+    def _has_uncommitted_changes(self) -> bool:
+        """Check if there are any uncommitted changes in the repository."""
+        try:
+            return bool(self.repo.index.diff(None) or self.repo.index.diff("HEAD"))
+        except GitCommandError:
+            # If we can't check, assume there are changes to be safe
+            return True
+
+    def _update_main_branch(self) -> None:
+        """Update main branch with latest changes from remote.
+
+        This method will:
+        1. Stash any uncommitted changes
+        2. Remember the current branch
+        3. Switch to main
+        4. Pull latest changes
+        5. Switch back to original branch
+        6. Pop the stash if there was one
+
+        Raises:
+            GitError: If any git operation fails or if main is still behind after update
+        """
+        try:
+            current = self.get_current_branch_name()
+            had_changes = False
+
+            # Stash changes if any
+            if self._has_uncommitted_changes():
+                self.repo.git.stash("push", "-m", "arborist: auto-stash before updating main")
+                had_changes = True
+
+            try:
+                # Switch to main and update
+                self.repo.git.checkout("main")
+                self.repo.git.pull("origin", "main")
+
+                # Verify the update was successful
+                if not self._check_main_branch_status():
+                    raise GitError("Failed to update main branch: still behind remote after pull")
+
+            finally:
+                # Always try to switch back and restore changes
+                if current:
+                    self.repo.git.checkout(current)
+                if had_changes:
+                    self.repo.git.stash("pop")
+
+        except GitCommandError as err:
+            raise GitError(f"Failed to update main branch: {err}") from err
+
+    def _check_main_branch_status(self) -> bool:
+        """Check if local main branch is up to date with remote.
+
+        Returns:
+            bool: True if local main is up to date, False if it's behind remote
+        """
+        try:
+            # First ensure we have the latest remote info
+            self.fetch_from_remotes()
+
+            # Get commit counts
+            behind_count = self.repo.git.rev_list("--count", "main..origin/main").strip()
+
+            # If behind_count is not "0", local main is behind remote
+            return behind_count == "0"
+        except GitCommandError:
+            # If we can't check, assume we're up to date to avoid false warnings
+            return True
 
     def fetch_from_remotes(self) -> None:
         """Fetch latest state from all remotes and update local branches."""
@@ -72,16 +149,42 @@ class GitRepo:
     def get_branch_status(self) -> dict[str, BranchStatus]:
         """Get the status of all branches."""
         try:
+            # First check if local main is up to date
+            if not self._check_main_branch_status():
+                message = (
+                    "Local main branch is behind remote. You can either:\n\n"
+                    "A) Let arborist handle it automatically (recommended):\n"
+                    "   This will:\n"
+                    "   1. Stash any uncommitted changes\n"
+                    "   2. Switch to main and update it\n"
+                    "   3. Switch back to your current branch\n"
+                    "   4. Restore your uncommitted changes\n\n"
+                    "B) Do it manually:\n"
+                    "   1. Commit or stash any uncommitted changes\n"
+                    "   2. Switch to main: git checkout main\n"
+                    "   3. Update main: git pull origin main\n"
+                    "   4. Switch back to your branch\n"
+                    "   5. Run 'arb list' again\n\n"
+                    "Would you like arborist to handle it automatically? [y/N] "
+                )
+                raise GitError(message, needs_confirmation=True)
+
             status: dict[str, BranchStatus] = {}
             current = self.get_current_branch_name()
 
             # Get all local branches
-            local_branches = self.repo.git.branch("--format=%(refname:short)").splitlines()
+            local_branches = [
+                branch
+                for branch in self.repo.git.branch("--format=%(refname:short)").splitlines()
+                if not (
+                    branch.startswith("heads/")
+                    or branch.startswith("remotes/")
+                    or branch == "origin"  # Skip the special origin ref
+                    or branch == "HEAD"  # Skip HEAD ref
+                    or branch.endswith("/HEAD")  # Skip remote HEAD refs
+                )
+            ]
             for branch_name in local_branches:
-                # Skip internal Git refs
-                if branch_name.startswith("heads/") or branch_name.startswith("remotes/"):
-                    continue
-
                 # Special handling for main branch
                 if branch_name == "main":
                     status[branch_name] = BranchStatus.EMPTY
