@@ -95,12 +95,11 @@ def list(
     except GitError as err:
         if err.needs_confirmation:
             # Print without the confirmation prompt
-            message_parts = str(err).split("[y/N]")
-            print(f"[yellow]{message_parts[0].strip()}[/yellow]")
+            print(f"[yellow]{str(err).strip()}[/yellow]")
 
             # Ask for confirmation
-            confirm = input("Would you like arborist to handle it automatically? [y/N] ")
-            if confirm.lower() == "y":
+            confirm = typer.confirm("\nWould you like arborist to handle it automatically?", default=False)
+            if confirm:
                 try:
                     repo._update_main_branch()
                     # Fetch again to ensure we have the latest state
