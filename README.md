@@ -7,6 +7,7 @@
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 [![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-✓-green.svg)](https://conventionalcommits.org)
 [![SemVer](https://img.shields.io/badge/SemVer-✓-blue.svg)](https://semver.org/)
+[![CodeRabbit Reviews](https://img.shields.io/coderabbit/pull-request-reviews/ichoosetoaccept/arborist?logo=coderabbit&style=flat-square)](https://coderabbit.ai)
 
 ## Platform Support
 
